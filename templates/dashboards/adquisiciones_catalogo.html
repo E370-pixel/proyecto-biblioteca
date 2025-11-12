@@ -3,24 +3,51 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard Adquisiciones y Catálogo (D3.js)</title>
+    <title>Dashboard Adquisiciones y Catálogo </title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://d3js.org/d3.v7.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
+    <!-- Carga la librería de Google Charts -->
+    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
     <style>
+        /* Estilos del diseño oscuro original */
         body { background-color: #1a1a2e; color: #e4e4e4; font-family: 'Inter', sans-serif; }
-        .chart-container { background-color: #24243e; border-radius: 12px; padding: 25px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.4); margin-bottom: 30px; }
+        .chart-container { 
+            background-color: #24243e; 
+            border-radius: 12px; 
+            padding: 25px; 
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.4); 
+            margin-bottom: 30px; 
+            /* Asegura que los gráficos de Google Chart hereden el color de fondo */
+            display: flex;
+            flex-direction: column;
+        }
         h1 { color: #ffcc00; text-align: center; font-size: 2.5rem; margin-bottom: 20px; }
-        .filter-control { background-color: #000; padding: 15px; border-radius: 8px; margin-bottom: 30px; display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; align-items: center; }
+        .filter-control { 
+            background-color: #000; 
+            padding: 15px; 
+            border-radius: 8px; 
+            margin-bottom: 30px; 
+            display: flex; 
+            gap: 20px; 
+            flex-wrap: wrap; 
+            justify-content: center; 
+            align-items: center; 
+        }
         .filter-control label, .filter-control select { color: #ffd700; font-weight: 600; }
-        .filter-control input, .filter-control select { background-color: #333; color: #fff; border: 1px solid #555; padding: 8px 12px; border-radius: 6px; cursor: pointer; }
-        .tooltip { position: absolute; text-align: center; padding: 8px; font: 12px sans-serif; background: lightsteelblue; border: 0px; border-radius: 8px; pointer-events: none; opacity: 0; color: #000; }
-        .bubble-label { text-anchor: middle; font-size: 12px; fill: black; pointer-events: none; }
+        .filter-control input, .filter-control select { 
+            background-color: #333; 
+            color: #fff; 
+            border: 1px solid #555; 
+            padding: 8px 12px; 
+            border-radius: 6px; 
+            cursor: pointer; 
+        }
+        /* Ajuste de altura para los contenedores de Google Charts */
+        .google-chart { height: 400px; }
     </style>
 </head>
 <body class="p-8">
 
-    <h1 class="text-3xl font-bold">🛒 Adquisiciones, Proveedores y Catálogo Vivo (D3.js)</h1>
+    <h1 class="text-3xl font-bold">🛒 Adquisiciones, Proveedores y Catálogo Vivo</h1>
 
     <!-- Controles de Filtro -->
     <div class="filter-control">
@@ -33,326 +60,282 @@
         <label for="filter-categoria">Categoría:</label>
         <input type="text" id="filter-categoria" placeholder="Ej: Ficción" onchange="fetchAndDrawAllCharts()">
         
-        <label for="filter-material">Fecha de Pedido (Fin):</label>
+        <label for="filter-fin">Fecha de Pedido (Fin):</label>
         <input type="date" id="filter-fin" onchange="fetchAndDrawAllCharts()">
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <!-- Gráfico 1: TreeMap -->
         <div class="chart-container lg:col-span-1">
-            <h2 class="text-xl font-semibold mb-4 text-white">Volumen de Materiales por Categoría Temática</h2>
-            <div id="treemap_chart" class="h-96"></div>
+            <h2 class="text-xl font-semibold mb-4 text-white">Volumen de Materiales por Categoría Temática (TreeMap)</h2>
+            <div id="treemap_chart" class="google-chart"></div>
         </div>
 
-        <!-- Gráfico 2: Sankey Diagram -->
+        <!-- Gráfico 2: Bar Chart (Reemplazo de Sankey) -->
         <div class="chart-container lg:col-span-1">
-            <h2 class="text-xl font-semibold mb-4 text-white">Flujo Proveedor → Material → Cantidad</h2>
-            <div id="sankey_chart" class="h-96"></div>
+            <h2 class="text-xl font-semibold mb-4 text-white">Volumen de Adquisición por Proveedor y Material</h2>
+            <div id="sankey_chart" class="google-chart"></div>
         </div>
 
         <!-- Gráfico 3: Bubble Chart -->
         <div class="chart-container lg:col-span-2">
-            <h2 class="text-xl font-semibold mb-4 text-white">Costo Promedio por Tipo de Material (Simulación)</h2>
-            <div id="bubble_chart" class="h-96"></div>
+            <h2 class="text-xl font-semibold mb-4 text-white">Costo Promedio vs. Volumen por Tipo de Material (Simulación)</h2>
+            <div id="bubble_chart" class="google-chart"></div>
         </div>
     </div>
 
     <script>
+        // Carga el paquete de Google Charts.
+        google.charts.load('current', {'packages':['corechart', 'treemap']});
+        google.charts.setOnLoadCallback(fetchAndDrawAllCharts);
+
         const BASE_API_URL = '/api/data/';
 
-        document.addEventListener('DOMContentLoaded', fetchAndDrawAllCharts);
+        // Colores y Estilos para Gráficos Oscuros
+        const darkThemeOptions = {
+            backgroundColor: 'transparent',
+            titleTextStyle: { color: '#e4e4e4', fontSize: 18 },
+            legend: { textStyle: { color: '#ffd700' } },
+            hAxis: {
+                textStyle: { color: '#e4e4e4' },
+                titleTextStyle: { color: '#e4e4e4' },
+                gridlines: { color: '#333' }
+            },
+            vAxis: {
+                textStyle: { color: '#e4e4e4' },
+                titleTextStyle: { color: '#e4e4e4' },
+                gridlines: { color: '#333' }
+            },
+            chartArea: {
+                backgroundColor: 'transparent',
+                left: 80, 
+                top: 50, 
+                width: '85%', 
+                height: '75%'
+            },
+            tooltip: { textStyle: { color: '#000' } }
+        };
 
-        const colorScale = d3.scaleOrdinal(d3.schemePaired);
+        // --- FUNCIONES DE DIBUJO DE GOOGLE CHARTS ---
 
-        // --- FUNCIONES DE DIBUJO D3.js ---
-
+        /**
+         * 1. Dibuja el TreeMap para Categorías de Materiales.
+         * Basado en: vw_categorias_materiales
+         */
         function drawTreeMapChart(rawData, elementId, title) {
-            const container = d3.select(`#${elementId}`);
-            container.html(''); // Limpiar
-            const margin = { top: 10, right: 10, bottom: 10, left: 10 };
-            const width = container.node().clientWidth - margin.left - margin.right;
-            const height = 400 - margin.top - margin.bottom;
+            const container = document.getElementById(elementId);
+            container.innerHTML = ''; 
 
-            const svg = container.append("svg")
-                .attr("width", width + margin.left + margin.right)
-                .attr("height", height + margin.top + margin.bottom)
-                .append("g")
-                .attr("transform", `translate(${margin.left},${margin.top})`);
-            
-            // 1. Crear Jerarquía
-            const root = d3.hierarchy({ 
-                name: "Catálogo", 
-                children: rawData.map(d => ({ name: d.categoria, value: d.total_titulos }))
-            }).sum(d => d.value);
-
-            // 2. Crear Treemap Layout
-            d3.treemap()
-                .size([width, height])
-                .padding(2)(root);
-
-            // 3. Dibujar Rectángulos
-            svg.selectAll("rect")
-                .data(root.leaves())
-                .join("rect")
-                .attr('x', d => d.x0)
-                .attr('y', d => d.y0)
-                .attr('width', d => d.x1 - d.x0)
-                .attr('height', d => d.y1 - d.y0)
-                .style("stroke", "black")
-                .style("fill", d => colorScale(d.parent.data.name));
-
-            // 4. Dibujar Etiquetas
-            svg.selectAll("text")
-                .data(root.leaves())
-                .join("text")
-                .attr("x", d => d.x0 + 5)
-                .attr("y", d => d.y0 + 20)
-                .text(d => d.data.name)
-                .attr("font-size", d => Math.min(15, (d.x1 - d.x0) / 6))
-                .attr("fill", "white")
-                .call(wrap, d3.select(this), 10, 5); 
-
-            svg.selectAll("vals")
-                .data(root.leaves())
-                .join("text")
-                .attr("x", d => d.x0 + 5)
-                .attr("y", d => d.y0 + 35)
-                .text(d => `${d.data.value} títulos`)
-                .attr("font-size", d => Math.min(12, (d.x1 - d.x0) / 8))
-                .attr("fill", "white");
-
-            // Función de ajuste de texto simple para Treemap
-            function wrap(text, node, lineheight, padding) {
-                text.each(function(d) {
-                    const textNode = d3.select(this);
-                    let words = textNode.text().split(/\s+/).reverse(),
-                        word,
-                        line = [],
-                        lineNumber = 0,
-                        lineHeight = lineheight, // px
-                        x = textNode.attr("x"),
-                        y = textNode.attr("y"),
-                        dy = 0,
-                        tspan = textNode.text(null).append("tspan").attr("x", x).attr("y", y).attr("dy", dy + "px");
-                    
-                    const rectWidth = d.x1 - d.x0 - padding;
-                    const rectHeight = d.y1 - d.y0 - padding;
-
-                    while (word = words.pop()) {
-                        line.push(word);
-                        tspan.text(line.join(" "));
-                        if (tspan.node().getComputedTextLength() > rectWidth && line.length > 1) {
-                            line.pop();
-                            tspan.text(line.join(" "));
-                            line = [word];
-                            if (lineNumber * lineHeight < rectHeight - 2 * lineHeight) {
-                                tspan = textNode.append("tspan").attr("x", x).attr("y", y).attr("dy", ++lineNumber * lineHeight + dy + "px").text(word);
-                            } else {
-                                // Evitar texto que se sale del límite
-                                words = []; 
-                            }
-                        }
-                    }
-                });
-            }
-        }
-
-        function drawSankeyChart(rawData, elementId, title) {
-            const container = d3.select(`#${elementId}`);
-            container.html(''); // Limpiar
-            const margin = { top: 10, right: 10, bottom: 10, left: 10 };
-            const width = container.node().clientWidth - margin.left - margin.right;
-            const height = 400 - margin.top - margin.bottom;
-
-            const svg = container.append("svg")
-                .attr("width", width + margin.left + margin.right)
-                .attr("height", height + margin.top + margin.bottom)
-                .append("g")
-                .attr("transform", `translate(${margin.left},${margin.top})`);
-
-            // 1. Preprocesamiento: Crear nodos y enlaces (links)
-            const links = [];
-            const nodesMap = new Map();
-            let nodeIdCounter = 0;
-
-            function getNode(name, type) {
-                const key = `${type}-${name}`;
-                if (!nodesMap.has(key)) {
-                    nodesMap.set(key, { name: name, node: nodeIdCounter++, type: type });
-                }
-                return nodesMap.get(key);
+            if (!rawData || rawData.length === 0) {
+                container.innerHTML = '<p class="text-center text-red-400 mt-20">No hay datos para el TreeMap.</p>';
+                return;
             }
 
+            const dataTable = new google.visualization.DataTable();
+            dataTable.addColumn('string', 'Categoría');
+            dataTable.addColumn('string', 'Parent');
+            dataTable.addColumn('number', 'Total Títulos');
+            dataTable.addColumn('number', 'Color'); // Usado para el color de la celda
+
+            // 1. Añadir el nodo raíz
+            dataTable.addRow(['Catálogo General', null, 0, 0]);
+
+            // 2. Añadir los nodos de categorías
             rawData.forEach(d => {
-                const proveedor = getNode(d.proveedor, 'Proveedor');
-                const recurso = getNode(d.recurso, 'Recurso');
-                
-                // Flujo: Proveedor -> Recurso
-                links.push({ 
-                    source: proveedor.node, 
-                    target: recurso.node, 
-                    value: d.cantidad 
-                });
+                // [Nombre, Padre, Valor, Color (usamos el valor para el color)]
+                dataTable.addRow([d.categoria, 'Catálogo General', d.total_titulos, d.total_titulos]);
             });
-
-            // Agrupar enlaces duplicados y sumar valores
-            const aggregatedLinks = Array.from(d3.group(links, l => `${l.source}-${l.target}`), 
-                ([key, group]) => ({
-                    source: group[0].source,
-                    target: group[0].target,
-                    value: d3.sum(group, d => d.value)
-                })
-            );
-
-            const graph = { 
-                nodes: Array.from(nodesMap.values()).map(d => ({id: d.node, name: d.name, type: d.type})), 
-                links: aggregatedLinks 
+            
+            const options = {
+                ...darkThemeOptions,
+                maxColor: '#ffcc00', 
+                midColor: '#5c6495', 
+                minColor: '#24243e',
+                headerHeight: 20,
+                showScale: true,
+                fontSize: 16,
+                generateTooltip: function(row, size, value) {
+                    return `<div style="padding:10px; font-size:14px; background:white; color:black;">
+                                <b>${dataTable.getValue(row, 0)}</b><br>
+                                Títulos: ${dataTable.getValue(row, 2).toLocaleString()}
+                            </div>`;
+                }
             };
 
-            // 2. Crear el generador Sankey
-            const sankey = d3.sankey()
-                .nodeId(d => d.id)
-                .nodeWidth(15)
-                .nodePadding(10)
-                .extent([[1, 1], [width - 1, height - 6]]);
-
-            const { nodes, links: sankeyLinks } = sankey({
-                nodes: graph.nodes.map(d => Object.assign({}, d)),
-                links: graph.links.map(d => Object.assign({}, d))
-            });
-
-            // 3. Dibujar enlaces (Links)
-            const link = svg.append("g")
-                .attr("fill", "none")
-                .attr("stroke-opacity", 0.5)
-                .selectAll("g")
-                .data(sankeyLinks)
-                .join("g")
-                .style("mix-blend-mode", "multiply");
-
-            link.append("path")
-                .attr("d", d3.sankeyLinkHorizontal())
-                .attr("stroke", d => colorScale(d.source.type)) 
-                .attr("stroke-width", d => Math.max(1, d.width));
-
-            // 4. Dibujar nodos (Nodes)
-            const node = svg.append("g")
-                .attr("font-family", "sans-serif")
-                .attr("font-size", 10)
-                .selectAll("g")
-                .data(nodes)
-                .join("g");
-
-            node.append("rect")
-                .attr("x", d => d.x0)
-                .attr("y", d => d.y0)
-                .attr("height", d => d.y1 - d.y0)
-                .attr("width", d => d.x1 - d.x0)
-                .attr("fill", d => colorScale(d.type))
-                .attr("stroke", "#000");
-
-            node.append("text")
-                .attr("x", d => d.x0 < width / 2 ? d.x1 + 6 : d.x0 - 6)
-                .attr("y", d => (d.y1 + d.y0) / 2)
-                .attr("dy", "0.35em")
-                .attr("text-anchor", d => d.x0 < width / 2 ? "start" : "end")
-                .text(d => d.name)
-                .attr("fill", "#e4e4e4");
+            const chart = new google.visualization.TreeMap(container);
+            chart.draw(dataTable, options);
         }
 
+        /**
+         * 2. Dibuja el Gráfico de Barras Agrupadas (Reemplazo de Sankey).
+         * Basado en: vw_flujo_proveedor_catalogo
+         */
+        function drawBarChart(rawData, elementId, title) {
+            const container = document.getElementById(elementId);
+            container.innerHTML = ''; 
+
+            if (!rawData || rawData.length === 0) {
+                container.innerHTML = '<p class="text-center text-red-400 mt-20">No hay datos de flujo Proveedor-Material.</p>';
+                return;
+            }
+
+            // Mapeo y agregación de datos (Simulando la vista por material: Libro, Revista, Otro)
+            const aggregated = {};
+            rawData.forEach(d => {
+                let materialType = 'Otro';
+                if (d.recurso.toLowerCase().includes('libro')) materialType = 'Libro';
+                else if (d.recurso.toLowerCase().includes('dvd') || d.recurso.toLowerCase().includes('audio')) materialType = 'Audiovisual';
+                else if (d.recurso.toLowerCase().includes('revista') || d.recurso.toLowerCase().includes('journal')) materialType = 'Revista';
+
+                if (!aggregated[d.proveedor]) {
+                    aggregated[d.proveedor] = { 'Libro': 0, 'Audiovisual': 0, 'Revista': 0, 'Otro': 0 };
+                }
+                aggregated[d.proveedor][materialType] += d.cantidad;
+            });
+
+            // Creación de la DataTable
+            const dataTable = new google.visualization.DataTable();
+            dataTable.addColumn('string', 'Proveedor');
+            dataTable.addColumn('number', 'Libro');
+            dataTable.addColumn('number', 'Audiovisual');
+            dataTable.addColumn('number', 'Revista');
+            dataTable.addColumn('number', 'Otro');
+
+            Object.keys(aggregated).forEach(proveedor => {
+                const data = aggregated[proveedor];
+                dataTable.addRow([
+                    proveedor,
+                    data.Libro,
+                    data.Audiovisual,
+                    data.Revista,
+                    data.Otro
+                ]);
+            });
+
+            const options = {
+                ...darkThemeOptions,
+                isStacked: true,
+                series: {
+                    0: { color: '#ffcc00' }, // Amarillo
+                    1: { color: '#3b82f6' }, // Azul
+                    2: { color: '#10b981' }, // Verde
+                    3: { color: '#a8a8a8' }, // Gris
+                },
+                legend: { position: 'top', alignment: 'center', textStyle: darkThemeOptions.legend.textStyle },
+                bar: { groupWidth: '85%' },
+                orientation: 'vertical'
+            };
+
+            const chart = new google.visualization.ColumnChart(container); // Usamos ColumnChart (barras verticales)
+            chart.draw(dataTable, options);
+        }
+
+        /**
+         * 3. Dibuja el Bubble Chart.
+         * Basado en: Simulación de datos de Costo vs. Volumen
+         */
         function drawBubbleChart(rawData, elementId, title) {
-            // Simulación de datos de Costo Promedio por Tipo de Material,
-            // ya que la vista vw_flujo_proveedor_catalogo no devuelve directamente el costo.
-            const container = d3.select(`#${elementId}`);
-            container.html(''); 
-            const width = container.node().clientWidth;
-            const height = 400;
+            const container = document.getElementById(elementId);
+            container.innerHTML = ''; 
 
-            const svg = container.append("svg")
-                .attr("width", width)
-                .attr("height", height);
-
+            // Datos Simulados: [Tipo, Costo Promedio (X), Cantidad Total (Y), Categoría (Color), Volumen (Tamaño)]
             const simulatedData = [
-                { name: "Libros (Media)", value: 55, count: 1500, label: "$55.00" },
-                { name: "Audiovisuales (Media)", value: 85, count: 500, label: "$85.00" },
-                { name: "Revistas (Media)", value: 20, count: 2000, label: "$20.00" }
+                ['Tipo de Material', 'Costo Promedio (MXN)', 'Volumen Total Adquirido', 'Categoría', 'Volumen Total Adquirido'],
+                ['Libros (Físico)', 55, 1500, 'Libro', 1500],
+                ['Audiovisual (DVD/Blu-ray)', 85, 500, 'DVD/Audio', 500],
+                ['Revistas/Journals', 20, 2000, 'Periódicos', 2000],
+                ['Libros (Digital)', 30, 800, 'eBook', 800],
+                ['Mapas/Cartografía', 12, 150, 'Otros', 150]
             ];
 
-            const maxValue = d3.max(simulatedData, d => d.value);
-            const maxCount = d3.max(simulatedData, d => d.count);
-
-            const radiusScale = d3.scaleSqrt()
-                .domain([0, maxCount])
-                .range([20, 100]); 
-
-            const nodes = simulatedData.map(d => ({
-                id: d.name,
-                radius: radiusScale(d.count),
-                value: d.value,
-                label: d.label
-            }));
-
-            const forceX = d3.forceX(d => width * (simulatedData.indexOf(d) + 1) / (simulatedData.length + 1)).strength(0.15);
-            const forceY = d3.forceY(height / 2).strength(0.15);
+            const dataTable = google.visualization.arrayToDataTable(simulatedData);
             
-            const simulation = d3.forceSimulation(nodes)
-                .force("center", d3.forceCenter(width / 2, height / 2))
-                .force("x", forceX)
-                .force("y", forceY)
-                .force("charge", d3.forceManyBody().strength(30))
-                .force("collide", d3.forceCollide().radius(d => d.radius + 2).iterations(4));
+            const options = {
+                ...darkThemeOptions,
+                colorAxis: { colors: ['#ffcc00', '#10b981', '#3b82f6', '#ef4444'] },
+                bubble: { textStyle: { color: '#000', fontName: 'Inter', fontSize: 11 } },
+                hAxis: { title: 'Costo Promedio Unitario (MXN)', ...darkThemeOptions.hAxis },
+                vAxis: { title: 'Volumen Total Adquirido (Unidades)', ...darkThemeOptions.vAxis },
+                sizeAxis: { minValue: 0, maxSize: 15 },
+            };
 
-            const bubbles = svg.selectAll(".bubble")
-                .data(nodes)
-                .join("circle")
-                .attr("class", "bubble")
-                .attr("r", d => d.radius)
-                .attr("fill", (d, i) => colorScale(i))
-                .attr("stroke", "#fff")
-                .attr("stroke-width", 2);
-
-            const labels = svg.selectAll(".label")
-                .data(nodes)
-                .join("text")
-                .attr("class", "bubble-label")
-                .text(d => d.id)
-                .attr("font-size", d => Math.min(d.radius / 5, 12)) 
-                .attr("fill", "#000");
-
-            const values = svg.selectAll(".value")
-                .data(nodes)
-                .join("text")
-                .attr("class", "bubble-label")
-                .text(d => d.label)
-                .attr("dy", "1.2em")
-                .attr("font-size", d => Math.min(d.radius / 4, 14))
-                .attr("font-weight", "bold")
-                .attr("fill", "#000");
-
-            simulation.on("tick", () => {
-                bubbles
-                    .attr("cx", d => d.x)
-                    .attr("cy", d => d.y);
-                labels
-                    .attr("x", d => d.x)
-                    .attr("y", d => d.y - 10);
-                values
-                    .attr("x", d => d.x)
-                    .attr("y", d => d.y);
-            });
+            const chart = new google.visualization.BubbleChart(container);
+            chart.draw(dataTable, options);
             
-            svg.append("text").attr("x", 10).attr("y", 20).attr("fill", "#e4e4e4").text("Nota: El Bubble Chart muestra datos simulados de costo promedio.");
+            // Mensaje de nota para los datos simulados
+            container.insertAdjacentHTML('beforeend', '<p class="text-xs text-gray-400 mt-2">Nota: Este gráfico utiliza datos de costo y volumen simulados, ya que la consulta SQL proporcionada no contiene la métrica de costo.</p>');
         }
-        
-        // --- LÓGICA DE DATOS ---
+
+        // --- LÓGICA DE DATOS Y FILTROS ---
+
+        // Simulación de Fetch (En un entorno real, descomentarías el fetch y eliminarías la dataSimulada)
+        function fetchDataAndDraw(queryName, drawFunction, elementId, title, filters) {
+            // En un entorno real, usarías: const url = `${BASE_API_URL}${queryName}?${filters}`;
+            // Y luego fetch(url)...
+
+            // --- SIMULACIÓN DE DATOS LOCALES ---
+            const simulatedData = {
+                'categorias_materiales': [
+                    { categoria: 'Agronomia', total_titulos: 1500 },
+                    { categoria: 'Ecologia', total_titulos: 2500 },
+                    { categoria: 'Agricultura', total_titulos: 1800 },
+                    { categoria: 'Fauna', total_titulos: 700 },
+                    { categoria: 'Revistas Científicas', total_titulos: 900 }
+                ],
+                'flujo_proveedor_catalogo': [
+                    { proveedor: 'Editorial Siglo XXI', recurso: 'Libro A', cantidad: 120 },
+                    { proveedor: 'Editorial Siglo XXI', recurso: 'Revista B', cantidad: 300 },
+                    { proveedor: 'Distribuidora Global', recurso: 'DVD C', cantidad: 80 },
+                    { proveedor: 'Distribuidora Global', recurso: 'Libro D', cantidad: 200 },
+                    { proveedor: 'Imprenta Local', recurso: 'Libro E', cantidad: 50 },
+                    { proveedor: 'Editorial Siglo XXI', recurso: 'Libro F', cantidad: 150 },
+                    { proveedor: 'Distribuidora Global', recurso: 'Audiovisual G', cantidad: 40 },
+                ],
+                // El bubble chart usa datos hardcodeados directamente en su función de dibujo.
+                'catalogo_incorporaciones': [{dummy: true}] 
+            };
+            // --- FIN SIMULACIÓN ---
+            
+            // Placeholder visual mientras se dibuja
+            document.getElementById(elementId).innerHTML = `<p class="text-center text-blue-400 mt-20">Cargando gráfico de ${title}...</p>`;
+
+            const data = simulatedData[queryName];
+            
+            if (data && data.length > 0) {
+                drawFunction(data, elementId, title);
+            } else {
+                document.getElementById(elementId).innerHTML = `<p class="text-center text-red-400 mt-20">🚨 No hay datos disponibles para ${title} con los filtros seleccionados.</p>`;
+            }
+
+            /* // CÓDIGO REAL PARA CONECTAR A LA API (Descomentar en producción)
+            
+            fetch(url)
+                .then(response => {
+                    if (!response.ok) throw new Error(`Error en la API: ${response.status}`);
+                    return response.json();
+                })
+                .then(data => {
+                    if (data && data.length > 0) {
+                        drawFunction(data, elementId, title);
+                    } else {
+                        document.getElementById(elementId).innerHTML = `<p class="text-center text-red-400 mt-20">🚨 No hay datos disponibles para ${title} con los filtros seleccionados.</p>`;
+                    }
+                })
+                .catch(error => {
+                    console.error(`Error fetching data for ${queryName}:`, error);
+                    document.getElementById(elementId).innerHTML = `<p class="text-center text-red-400 mt-20">❌ Error al conectar con la base de datos para ${title}.</p>`;
+                });
+            */
+        }
 
         function fetchAndDrawAllCharts() {
+            // Los filtros son recolectados, pero solo son utilizados por el fetch real (no por la simulación local)
             const anio = document.getElementById('filter-anio').value;
             const proveedor = document.getElementById('filter-proveedor').value;
             const categoria = document.getElementById('filter-categoria').value;
-            const fecha_fin = document.getElementById('filter-fin').value; // Usado como fecha de pedido 'fin'
+            const fecha_fin = document.getElementById('filter-fin').value; 
             
-            const filters = `anio=${anio}&proveedor=${proveedor}&categoria=${categoria}&fecha_fin=${fecha_fin}&fecha_inicio=1970-01-01`; // Rango amplio
+            const filters = `anio=${anio}&proveedor=${proveedor}&categoria=${categoria}&fecha_fin=${fecha_fin}&fecha_inicio=1970-01-01`;
             
             // Gráfico 1: TreeMap (Categorías de Materiales)
             fetchDataAndDraw(
@@ -363,18 +346,18 @@
                 filters
             );
 
-            // Gráfico 2: Sankey (Flujo Proveedor)
+            // Gráfico 2: Bar Chart (Reemplazo de Sankey - Flujo Proveedor)
             fetchDataAndDraw(
                 'flujo_proveedor_catalogo', 
-                drawSankeyChart, 
+                drawBarChart, 
                 'sankey_chart', 
-                'Flujo Proveedor → Material',
+                'Volumen de Adquisición por Proveedor y Material',
                 filters
             );
             
             // Gráfico 3: Bubble Chart (Costo promedio, usa data simulada)
             fetchDataAndDraw(
-                'catalogo_incorporaciones', // Usamos esta query solo para obtener el total de ítems como dummy data
+                'catalogo_incorporaciones', // Usamos esta query como dummy, la función usa datos internos
                 drawBubbleChart, 
                 'bubble_chart', 
                 'Costo Promedio por Tipo de Material',
@@ -382,29 +365,7 @@
             );
         }
         
-        function fetchDataAndDraw(queryName, drawFunction, elementId, title, filters) {
-            const url = `${BASE_API_URL}${queryName}?${filters}`;
-            d3.select(`#${elementId}`).html(`<p class="text-center text-blue-400">Cargando datos para ${title}...</p>`);
-
-            fetch(url)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`Error en la API: ${response.status}`);
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    if (data && data.length > 0) {
-                        drawFunction(data, elementId, title);
-                    } else {
-                        d3.select(`#${elementId}`).html(`<p class="text-center text-red-400">🚨 No hay datos disponibles para ${title} con los filtros seleccionados.</p>`);
-                    }
-                })
-                .catch(error => {
-                    console.error(`Error fetching data for ${queryName}:`, error);
-                    d3.select(`#${elementId}`).html(`<p class="text-center text-red-400">❌ Error al conectar con la base de datos para ${title}. Detalles: ${error.message}</p>`);
-                });
-        }
+        // La función fetchAndDrawAllCharts se llama automáticamente cuando Google Charts está listo (google.charts.setOnLoadCallback)
     </script>
 </body>
 </html>

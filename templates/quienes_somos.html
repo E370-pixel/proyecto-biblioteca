@@ -3,9 +3,122 @@
 {% block title %}Quiénes Somos{% endblock %}
 
 {% block content %}
-<section class="text-section">
-    <h2>📚 Nuestro Equipo y Propósito</h2>
-    <p>Aquí puedes escribir sobre quiénes son, el equipo detrás de la biblioteca virtual, su filosofía y compromiso. Asegúrate de que el texto sea lo suficientemente extenso para "llenar la página" o ajusta el estilo CSS.</p>
-    <p>La **Biblioteca Virtual** no es solo un repositorio de documentos; es una plataforma dinámica diseñada para adaptarse a las necesidades del estudiante moderno y el investigador, promoviendo el acceso equitativo y la gestión inteligente de la información.</p>
+<section class="text-section p-6 sm:p-10 space-y-10 max-w-6xl mx-auto">
+
+<header class="text-center pb-6 border-b border-gray-700">
+    <h2 class="text-4xl font-extrabold text-yellow-400 tracking-tight mb-2">
+        La Esencia de El Buen Saber: Fomentando el Conocimiento Global
+    </h2>
+    <p class="text-xl text-gray-400 italic">
+        "Donde la tradición bibliotecaria se encuentra con la innovación digital."
+    </p>
+</header>
+
+<!-- Principios Fundamentales y Compromiso Tecnológico (Sustituyendo Misión y Visión) -->
+<div class="grid md:grid-cols-2 gap-8">
+    
+    <!-- Principios Fundamentales -->
+    <div class="bg-gray-800 p-6 rounded-lg shadow-2xl border-l-4 border-yellow-500">
+        <h3 class="text-2xl font-bold text-white mb-3 flex items-center">
+            <span class="text-yellow-500 mr-3">💎</span> Nuestros Principios Fundamentales
+        </h3>
+        <p class="text-gray-300 mb-4">
+            Regidos por la ética y la excelencia, operamos bajo pilares inquebrantables que garantizan la calidad y la accesibilidad de nuestro servicio:
+        </p>
+        <ul class="list-none space-y-3 text-gray-300">
+            <li class="flex items-start">
+                <span class="text-yellow-400 font-bold mr-2 mt-1">•</span>
+                <div>
+                    <strong class="text-white">Integridad Académica:</strong> Solo ofrecemos contenido curado y validado, respetando la autoría y la diversidad de pensamiento.
+                </div>
+            </li>
+            <li class="flex items-start">
+                <span class="text-yellow-400 font-bold mr-2 mt-1">•</span>
+                <div>
+                    <strong class="text-white">Universalidad de Acceso:</strong> Trabajamos para que el conocimiento sea libre de barreras geográficas, económicas o tecnológicas para todos los usuarios.
+                </div>
+            </li>
+            <li class="flex items-start">
+                <span class="text-yellow-400 font-bold mr-2 mt-1">•</span>
+                <div>
+                    <strong class="text-white">Sostenibilidad:</strong> Compromiso con la preservación digital a largo plazo, asegurando que el legado documental perdure para futuras generaciones.
+                </div>
+            </li>
+        </ul>
+    </div>
+
+    <!-- Compromiso Tecnológico -->
+    <div class="bg-gray-800 p-6 rounded-lg shadow-2xl border-l-4 border-yellow-500">
+        <h3 class="text-2xl font-bold text-white mb-3 flex items-center">
+            <span class="text-yellow-500 mr-3">🚀</span> Compromiso con la Innovación
+        </h3>
+        <p class="text-gray-300 mb-4">
+            La tecnología es nuestra herramienta principal para optimizar la experiencia del usuario y la gestión documental:
+        </p>
+        <ul class="list-none space-y-3 text-gray-300">
+            <li class="flex items-start">
+                <span class="text-yellow-400 font-bold mr-2 mt-1">•</span>
+                <div>
+                    <strong class="text-white">Búsqueda Semántica Avanzada:</strong> Implementación de IA para ir más allá de las palabras clave, entendiendo la intención del usuario.
+                </div>
+            </li>
+            <li class="flex items-start">
+                <span class="text-yellow-400 font-bold mr-2 mt-1">•</span>
+                <div>
+                    <strong class="text-white">Experiencia Multi-dispositivo:</strong> Diseño adaptativo que garantiza una lectura fluida y completa en cualquier pantalla, desde el móvil hasta el escritorio.
+                </div>
+            </li>
+            <li class="flex items-start">
+                <span class="text-yellow-400 font-bold mr-2 mt-1">•</span>
+                <div>
+                    <strong class="text-white">Seguridad y Privacidad:</strong> Protección de los datos personales y de la integridad de la colección digital con los más altos estándares de cifrado.
+                </div>
+            </li>
+        </ul>
+    </div>
+</div>
+
+<!-- El Equipo y la Estructura (Sección mantenida) -->
+<div class="pt-6">
+    <h3 class="text-3xl font-bold text-white mb-4 border-b border-gray-700 pb-2">
+        El Ecosistema Humano
+    </h3>
+    <p class="text-gray-300 mb-6">
+        Detrás de la fluidez de nuestro código y la amplitud de nuestra colección, reside un equipo multidisciplinario comprometido con la excelencia. Esta colaboración única garantiza la integridad académica y la innovación técnica de nuestra plataforma. 
+    </p>
+    
+    <div class="grid md:grid-cols-3 gap-6 text-center">
+        <!-- Rol 1 -->
+        <div class="p-4 bg-gray-700/50 rounded-lg transform transition duration-300 hover:bg-gray-700 hover:scale-[1.02]">
+            <p class="text-xl font-semibold text-yellow-400">Curadores y Bibliotecarios</p>
+            <p class="text-sm text-gray-400 mt-2">Garantizan la calidad del catálogo, el respeto a los derechos de autor y la organización semántica de los contenidos. Son el alma académica de El Buen Saber.</p>
+        </div>
+        <!-- Rol 2 -->
+        <div class="p-4 bg-gray-700/50 rounded-lg transform transition duration-300 hover:bg-gray-700 hover:scale-[1.02]">
+            <p class="text-xl font-semibold text-yellow-400">Ingenieros de Plataforma</p>
+            <p class="text-sm text-gray-400 mt-2">Responsables de la infraestructura tecnológica, la velocidad de acceso, la seguridad de los datos y el desarrollo de nuevas herramientas interactivas.</p>
+        </div>
+        <!-- Rol 3 -->
+        <div class="p-4 bg-gray-700/50 rounded-lg transform transition duration-300 hover:bg-gray-700 hover:scale-[1.02]">
+            <p class="text-xl font-semibold text-yellow-400">Asesores Académicos</p>
+            <p class="text-sm text-gray-400 mt-2">Una red de expertos en diversas disciplinas que valida la pertinencia de las colecciones y orienta la adquisición de nuevos títulos esenciales.</p>
+        </div>
+    </div>
+</div>
+
+<!-- Compromiso Final -->
+<div class="pt-8 border-t border-gray-700 mt-10">
+    <h3 class="text-3xl font-bold text-yellow-400 mb-4">
+        Llamada a la Comunidad
+    </h3>
+    <p class="text-gray-300">
+        El Buen Saber se nutre de la comunidad que servimos. Nuestro modelo se fundamenta en la colaboración con instituciones, autores y usuarios individuales. Si comparte nuestra pasión por la educación abierta y la investigación, le invitamos a contactar a nuestro equipo de gestión de alianzas. Juntos, podemos expandir el horizonte del conocimiento accesible.
+    </p>
+    <p class="text-gray-300 mt-4 italic font-medium">
+        Estamos aquí para servirle y para construir el futuro de la educación digital.
+    </p>
+</div>
+
+
 </section>
 {% endblock %}
