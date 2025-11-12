@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Selección de Dashboards</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1a1a2e; /* Fondo oscuro principal */
+            color: #e4e4e4;
+        }
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+        }
+        .card {
+            background-color: #24243e; /* Fondo de tarjeta oscuro */
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+            transition: transform 0.3s, box-shadow 0.3s;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(255, 204, 0, 0.2);
+        }
+        .card-header {
+            padding: 15px;
+            background-color: #3e9dff; /* Azul para headers de Google Charts */
+            color: white;
+            font-weight: bold;
+            text-align: center;
+        }
+        .card-header.d3 {
+            background-color: #ffcc00; /* Dorado/Amarillo para headers de D3.js */
+            color: #1a1a2e;
+        }
+        .card-body {
+            padding: 20px;
+            text-align: center;
+            flex-grow: 1;
+        }
+        .dashboard-button {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            margin-top: 15px;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: background-color 0.3s, transform 0.1s;
+        }
+        .google-charts-btn {
+            background-color: #4CAF50; /* Verde */
+            color: white;
+        }
+        .google-charts-btn:hover {
+            background-color: #45a049;
+            transform: scale(1.02);
+        }
+        .d3-charts-btn {
+            background-color: #e53e3e; /* Rojo oscuro */
+            color: white;
+        }
+        .d3-charts-btn:hover {
+            background-color: #c53030;
+            transform: scale(1.02);
+        }
+    </style>
+</head>
+<body class="p-8">
+    <div class="max-w-6xl mx-auto">
+        <h1 class="text-4xl font-extrabold text-center mb-10 text-yellow-400">Panel de Visualizaciones (Dashboards)</h1>
+        
+        <div class="mb-8">
+            <h2 class="text-2xl font-bold mb-4 border-b-2 border-blue-400 pb-2 text-blue-400">Google Charts</h2>
+            <div class="dashboard-grid">
+                
+                <!-- 1. Uso y Flujo de Préstamos (Google Charts) -->
+                <div class="card">
+                    <div class="card-header">
+                        Flujo Operacional
+                    </div>
+                    <div class="card-body">
+                        <p class="text-gray-300">Análisis de la demanda y el flujo de préstamos y devoluciones.</p>
+                        <a href="/dashboards/uso-flujo-prestamos" class="dashboard-button google-charts-btn">
+                            Uso y Flujo de Préstamos
+                        </a>
+                    </div>
+                </div>
+
+                <!-- 2. Multas, Atrasos y Pagos (Google Charts) -->
+                <div class="card">
+                    <div class="card-header">
+                        Gestión Financiera
+                    </div>
+                    <div class="card-body">
+                        <p class="text-gray-300">Seguimiento a multas, atrasos y rendimiento de pagos.</p>
+                        <a href="/dashboards/multas-atrasos-pagos" class="dashboard-button google-charts-btn">
+                            Multas, Atrasos y Pagos
+                        </a>
+                    </div>
+                </div>
+
+                <!-- 3. Impacto y Uso Académico (Google Charts) -->
+                <div class="card">
+                    <div class="card-header">
+                        Uso Académico
+                    </div>
+                    <div class="card-body">
+                        <p class="text-gray-300">Distribución de préstamos por departamento y tipo de material.</p>
+                        <a href="/dashboards/impacto-uso-academico" class="dashboard-button google-charts-btn">
+                            Impacto y Uso Académico (GC)
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="mb-8">
+            <h2 class="text-2xl font-bold mb-4 border-b-2 border-yellow-400 pb-2 text-yellow-400">Visualizaciones D3.js</h2>
+            <div class="dashboard-grid">
+                
+                <!-- 4. Ciclo de Uso de Materiales (D3.js) -->
+                <div class="card">
+                    <div class="card-header d3">
+                        Flujo de Materiales
+                    </div>
+                    <div class="card-body">
+                        <p class="text-gray-300">Análisis del ciclo de vida y la frecuencia de uso del inventario.</p>
+                        <a href="/dashboards/ciclo-uso-materiales" class="dashboard-button d3-charts-btn">
+                            Ciclo de Uso de Materiales
+                        </a>
+                    </div>
+                </div>
+
+                <!-- 5. Adquisiciones, Proveedores y Catálogo Vivo (D3.js) -->
+                <div class="card">
+                    <div class="card-header d3">
+                        Catálogo y Adquisiciones
+                    </div>
+                    <div class="card-body">
+                        <p class="text-gray-300">Volumen, costo y flujo de entrada de nuevos materiales al catálogo.</p>
+                        <a href="/dashboards/adquisiciones-catalogo" class="dashboard-button d3-charts-btn">
+                            Adquisiciones y Catálogo
+                        </a>
+                    </div>
+                </div>
+
+                <!-- 6. Impacto y Uso Académico (D3.js) -->
+                <div class="card">
+                    <div class="card-header d3">
+                        Relaciones y Duración
+                    </div>
+                    <div class="card-body">
+                        <p class="text-gray-300">Redes de préstamos y análisis de la duración de los mismos.</p>
+                        <a href="/dashboards/impacto-uso-academico-d3" class="dashboard-button d3-charts-btn">
+                            Impacto y Uso Académico (D3)
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>

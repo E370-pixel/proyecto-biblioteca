@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Impacto y Uso Académico (D3.js)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body { background-color: #1a1a2e; color: #e4e4e4; font-family: 'Inter', sans-serif; }
+        .chart-container { background-color: #24243e; border-radius: 12px; padding: 25px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.4); margin-bottom: 30px; }
+        h1 { color: #ffcc00; text-align: center; font-size: 2.5rem; margin-bottom: 20px; }
+        .filter-control { background-color: #000; padding: 15px; border-radius: 8px; margin-bottom: 30px; display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; align-items: center; }
+        .filter-control label, .filter-control select { color: #ffd700; font-weight: 600; }
+        .filter-control input, .filter-control select { background-color: #333; color: #fff; border: 1px solid #555; padding: 8px 12px; border-radius: 6px; cursor: pointer; }
+        .tooltip { position: absolute; text-align: center; padding: 8px; font: 12px sans-serif; background: lightsteelblue; border: 0px; border-radius: 8px; pointer-events: none; opacity: 0; color: #000; }
+        .node { stroke: #fff; stroke-width: 1.5px; }
+        .link { stroke: #999; stroke-opacity: 0.6; }
+    </style>
+</head>
+<body class="p-8">
+
+    <h1 class="text-3xl font-bold">🎓 Impacto y Uso Académico (D3.js)</h1>
+
+    <!-- Controles de Filtro -->
+    <div class="filter-control">
+        <label for="filter-inicio">Fecha Inicio:</label>
+        <input type="date" id="filter-inicio" onchange="fetchAndDrawAllCharts()">
+        
+        <label for="filter-fin">Fecha Fin:</label>
+        <input type="date" id="filter-fin" onchange="fetchAndDrawAllCharts()">
+        
+        <label for="filter-material">Tipo Material:</label>
+        <select id="filter-material" onchange="fetchAndDrawAllCharts()">
+            <option value="">Todos</option>
+            <option value="Bibliográfico">Bibliográfico</option>
+            <option value="Audiovisual">Audiovisual</option>
+        </select>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <!-- Gráfico 1: Force Graph -->
+        <div class="chart-container lg:col-span-2">
+            <h2 class="text-xl font-semibold mb-4 text-white">Red de Relaciones: Estudiantes y Materiales Prestados</h2>
+            <div id="force_graph_relations" class="h-96"></div>
+        </div>
+
+        <!-- Gráfico 2: Histograma -->
+        <div class="chart-container lg:col-span-1">
+            <h2 class="text-xl font-semibold mb-4 text-white">Histograma de Duración de Préstamos (Días)</h2>
+            <div id="histogram_duracion" class="h-96"></div>
+        </div>
+
+        <!-- Gráfico 3: Pie Chart -->
+        <div class="chart-container lg:col-span-3">
+            <h2 class="text-xl font-semibold mb-4 text-white">Distribución de Devoluciones por Estado del Ejemplar</h2>
+            <div id="pie_chart_estado" class="h-96"></div>
+        </div>
+    </div>
+
+    <script>
+        const BASE_API_URL = '/api/data/';
+
+        document.addEventListener('DOMContentLoaded', fetchAndDrawAllCharts);
+
+        const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
+
+        // --- FUNCIONES DE DIBUJO D3.js ---
+
+        function drawForceGraph(rawData, elementId, title) {
+            const container = d3.select(`#${elementId}`);
+            container.html(''); 
+            const margin = { top: 10, right: 10, bottom: 10, left: 10 };
+            const width = container.node().clientWidth - margin.left - margin.right;
+            const height = 400 - margin.top - margin.bottom;
+
+            const svg = container.append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+
+            // 1. Crear Nodos y Enlaces
+            const nodesMap = new Map();
+            const links = [];
+            let nodeIdCounter = 0;
+
+            function getNode(name, group) {
+                const key = `${group}-${name}`;
+                if (!nodesMap.has(key)) {
+                    nodesMap.set(key, { id: nodeIdCounter++, name: name, group: group, count: 0 });
+                }
+                nodesMap.get(key).count++;
+                return nodesMap.get(key).id;
+            }
+
+            rawData.forEach(d => {
+                const studentId = getNode(d.estudiante, 'Estudiante');
+                const materialId = getNode(d.material, 'Material');
+                
+                links.push({ source: studentId, target: materialId, status: d.estado });
+            });
+
+            const graphNodes = Array.from(nodesMap.values());
+            
+            // Agrupar enlaces duplicados (Estudiante X prestó Material Y N veces)
+            const aggregatedLinks = Array.from(d3.group(links, l => `${l.source}-${l.target}`), 
+                ([key, group]) => ({
+                    source: group[0].source,
+                    target: group[0].target,
+                    value: group.length,
+                    status: group[0].status
+                })
+            );
+
+            // 2. Simulación de Fuerza
+            const simulation = d3.forceSimulation(graphNodes)
+                .force("link", d3.forceLink(aggregatedLinks).id(d => d.id).distance(50).strength(0.1))
+                .force("charge", d3.forceManyBody().strength(-300))
+                .force("center", d3.forceCenter(width / 2, height / 2))
+                .force("collide", d3.forceCollide().radius(d => 10 + Math.sqrt(d.count)));
+
+            // 3. Dibujar enlaces (Links)
+            const link = svg.append("g")
+                .attr("class", "links")
+                .selectAll("line")
+                .data(aggregatedLinks)
+                .join("line")
+                .attr("class", "link")
+                .attr("stroke-width", d => Math.sqrt(d.value))
+                .attr("stroke", d => d.status === 'Pendiente' ? '#ff4d4d' : '#4caf50');
+
+            // 4. Dibujar nodos (Nodes)
+            const node = svg.append("g")
+                .attr("class", "nodes")
+                .selectAll("circle")
+                .data(graphNodes)
+                .join("circle")
+                .attr("r", d => 5 + Math.sqrt(d.count) * 2)
+                .attr("fill", d => colorScale(d.group))
+                .attr("class", "node")
+                .call(d3.drag()
+                    .on("start", dragstarted)
+                    .on("drag", dragged)
+                    .on("end", dragended));
+
+            node.append("title").text(d => `${d.name} (${d.group})\nPréstamos: ${d.count}`);
+
+            // 5. Función de Tick
+            simulation.on("tick", () => {
+                link
+                    .attr("x1", d => d.source.x)
+                    .attr("y1", d => d.source.y)
+                    .attr("x2", d => d.target.x)
+                    .attr("y2", d => d.target.y);
+
+                node
+                    .attr("cx", d => d.x)
+                    .attr("cy", d => d.y);
+            });
+
+            // Funciones de Drag
+            function dragstarted(event, d) {
+                if (!event.active) simulation.alphaTarget(0.3).restart();
+                d.fx = d.x;
+                d.fy = d.y;
+            }
+            function dragged(event, d) {
+                d.fx = event.x;
+                d.fy = event.y;
+            }
+            function dragended(event, d) {
+                if (!event.active) simulation.alphaTarget(0);
+                d.fx = null;
+                d.fy = null;
+            }
+        }
+        
+        function drawHistogram(rawData, elementId, title) {
+            const container = d3.select(`#${elementId}`);
+            container.html(''); 
+            const margin = { top: 30, right: 30, bottom: 60, left: 60 };
+            const width = container.node().clientWidth - margin.left - margin.right;
+            const height = 400 - margin.top - margin.bottom;
+
+            const svg = container.append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+
+            // Escala X (días)
+            const x = d3.scaleLinear()
+                .domain([0, d3.max(rawData, d => d.duracion_dias) || 30]) 
+                .range([0, width]);
+            
+            svg.append("g")
+                .attr("transform", `translate(0,${height})`)
+                .call(d3.axisBottom(x).ticks(10).tickFormat(d => `${d} días`))
+                .selectAll("text")
+                .style("fill", "#e4e4e4");
+
+            // Preparar el Histograma por Tipo de Material
+            const binsBibliografico = d3.histogram()
+                .value(d => d.duracion_dias)
+                .domain(x.domain())
+                .thresholds(x.ticks(10))(rawData.filter(d => d.tipo_material === 'Bibliográfico'));
+
+            const binsAudiovisual = d3.histogram()
+                .value(d => d.duracion_dias)
+                .domain(x.domain())
+                .thresholds(x.ticks(10))(rawData.filter(d => d.tipo_material === 'Audiovisual'));
+                
+            const allBins = [...binsBibliografico, ...binsAudiovisual];
+            const maxFreq = d3.max(allBins, d => d.length);
+
+            // Escala Y (frecuencia)
+            const y = d3.scaleLinear()
+                .range([height, 0])
+                .domain([0, maxFreq]);
+            
+            svg.append("g")
+                .call(d3.axisLeft(y))
+                .selectAll("text")
+                .style("fill", "#e4e4e4");
+
+            // Dibujar barras (Bibliográfico)
+            svg.selectAll("rect.biblio")
+                .data(binsBibliografico)
+                .join("rect")
+                .attr("class", "biblio")
+                .attr("x", d => x(d.x0) + 1)
+                .attr("y", d => y(d.length))
+                .attr("width", d => x(d.x1) - x(d.x0) - 1)
+                .attr("height", d => height - y(d.length))
+                .style("fill", "#3e9dff")
+                .attr("opacity", 0.7);
+                
+            // Dibujar barras (Audiovisual)
+            svg.selectAll("rect.audio")
+                .data(binsAudiovisual)
+                .join("rect")
+                .attr("class", "audio")
+                .attr("x", d => x(d.x0) + 1)
+                .attr("y", d => y(d.length) - 5) // Desplazar ligeramente para que se vea
+                .attr("width", d => x(d.x1) - x(d.x0) - 1)
+                .attr("height", d => height - y(d.length))
+                .style("fill", "#ffcc00")
+                .attr("opacity", 0.7);
+
+            // Leyenda
+            const legend = svg.append("g")
+                .attr("transform", `translate(${width - 150}, 0)`);
+
+            legend.append("rect").attr("x", 0).attr("y", 0).attr("width", 10).attr("height", 10).attr("fill", "#3e9dff").attr("opacity", 0.7);
+            legend.append("text").attr("x", 15).attr("y", 9).text("Bibliográfico").style("fill", "#e4e4e4").style("font-size", "12px");
+            
+            legend.append("rect").attr("x", 0).attr("y", 20).attr("width", 10).attr("height", 10).attr("fill", "#ffcc00").attr("opacity", 0.7);
+            legend.append("text").attr("x", 15).attr("y", 29).text("Audiovisual").style("fill", "#e4e4e4").style("font-size", "12px");
+        }
+
+        function drawPieChart(rawData, elementId, title) {
+            const container = d3.select(`#${elementId}`);
+            container.html(''); 
+            const width = container.node().clientWidth;
+            const height = 400;
+            const radius = Math.min(width, height) / 2 - 10;
+
+            const svg = container.append("svg")
+                .attr("width", width)
+                .attr("height", height)
+                .append("g")
+                .attr("transform", `translate(${width / 2}, ${height / 2})`);
+
+            // Mapear datos a un formato que d3.pie entienda
+            const pie = d3.pie()
+                .value(d => d.total_devoluciones)
+                .sort(null);
+
+            const arc = d3.arc()
+                .innerRadius(radius * 0.4) // Donut Chart
+                .outerRadius(radius);
+
+            const data_ready = pie(rawData);
+
+            // Dibujar las porciones
+            svg.selectAll('slices')
+                .data(data_ready)
+                .join('path')
+                .attr('d', arc)
+                .attr('fill', (d, i) => colorScale(d.data.estado_ejemplar))
+                .attr("stroke", "#1a1a2e")
+                .style("stroke-width", "2px")
+                .style("opacity", 0.8);
+
+            // Agregar texto de etiquetas
+            svg.selectAll('slices')
+                .data(data_ready)
+                .join('text')
+                .text(d => d.data.estado_ejemplar)
+                .attr("transform", d => `translate(${arc.centroid(d)})`)
+                .style("text-anchor", "middle")
+                .style("font-size", 14)
+                .style("fill", "white");
+        }
+        
+        // --- LÓGICA DE DATOS ---
+
+        function fetchAndDrawAllCharts() {
+            const fecha_inicio = document.getElementById('filter-inicio').value;
+            const fecha_fin = document.getElementById('filter-fin').value;
+            const material = document.getElementById('filter-material').value;
+            
+            const filters = `fecha_inicio=${fecha_inicio}&fecha_fin=${fecha_fin}&material=${material}`;
+            
+            // Gráfico 1: Force Graph
+            fetchDataAndDraw(
+                'relacion_prestamos_materiales', 
+                drawForceGraph, 
+                'force_graph_relations', 
+                'Red de Relaciones',
+                filters
+            );
+
+            // Gráfico 2: Histograma
+            fetchDataAndDraw(
+                'duracion_prestamos', 
+                drawHistogram, 
+                'histogram_duracion', 
+                'Histograma de Duración de Préstamos',
+                filters
+            );
+            
+            // Gráfico 3: Pie Chart
+            fetchDataAndDraw(
+                'distribucion_devoluciones', 
+                drawPieChart, 
+                'pie_chart_estado', 
+                'Distribución de Devoluciones por Estado del Ejemplar',
+                filters
+            );
+        }
+        
+        function fetchDataAndDraw(queryName, drawFunction, elementId, title, filters) {
+            const url = `${BASE_API_URL}${queryName}?${filters}`;
+            d3.select(`#${elementId}`).html(`<p class="text-center text-blue-400">Cargando datos para ${title}...</p>`);
+
+            fetch(url)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Error en la API: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data && data.length > 0) {
+                        drawFunction(data, elementId, title);
+                    } else {
+                        d3.select(`#${elementId}`).html(`<p class="text-center text-red-400">🚨 No hay datos disponibles para ${title} con los filtros seleccionados.</p>`);
+                    }
+                })
+                .catch(error => {
+                    console.error(`Error fetching data for ${queryName}:`, error);
+                    d3.select(`#${elementId}`).html(`<p class="text-center text-red-400">❌ Error al conectar con la base de datos para ${title}. Detalles: ${error.message}</p>`);
+                });
+        }
+    </script>
+</body>
+</html>

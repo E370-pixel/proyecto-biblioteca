@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+
+{% block title %}Uso y Flujo de Préstamos{% endblock %}
+
+{% block head_scripts %}
+    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    
+    <script type="text/javascript">
+        google.charts.load('current', {'packages':['corechart', 'bar', 'controls']});
+        google.charts.setOnLoadCallback(fetchAndDrawAllCharts);
+
+        const BASE_API_URL = '/api/data/';
+
+        // Colores para la estética elegante oscura
+        const CHART_COLORS = ['#007bff', '#28a745', '#ffd700', '#dc3545'];
+        const TEXT_STYLE = { color: '#ccc' };
+        const TITLE_STYLE = { color: '#ffd700', fontSize: 16 };
+        const BG_COLOR = 'transparent';
+
+        // 1. Función principal para orquestar la carga de datos y el dibujo
+        function fetchAndDrawAllCharts() {
+            // ⬇️ 1. Capturar los valores de los filtros (SOLO MES y MATERIAL)
+            const mes = document.getElementById('filter-mes').value;
+            const material = document.getElementById('filter-material').value;
+
+            const filters = `mes=${mes}&material=${material}`;
+            
+            // Lógica de corrección: Sólo permitir datos si mes es '06' o vacío ('Todos')
+            const isMonthRestricted = (mes !== '' && mes !== '06');
+            
+            // Gráfico 1: Column Chart (Préstamos vs Devoluciones) - No afectado por la restricción de datos de junio
+            fetchDataAndDraw(
+                'prestamos_vs_devoluciones_mes', 
+                drawColumnChart, 
+                'column_chart_div', 
+                'Préstamos y Devoluciones por Mes',
+                filters,
+                false // Sin restricción
+            );
+
+            // Gráfico 2: Line Chart (Tendencia de Préstamos por Tipo de Material) - AFECTADO
+            if (isMonthRestricted) {
+                document.getElementById('line_chart_div').innerHTML = 
+                    `<p style="color: #ffd700; text-align: center; margin-top: 50px;">
+                        🚨 **Datos solo disponibles para el mes de Junio (06).**
+                    </p>`;
+            } else {
+                fetchDataAndDraw(
+                    'prestamos_tipo_material', 
+                    drawLineChart, 
+                    'line_chart_div', 
+                    'Tendencia de Préstamos por Tipo de Material (Mensual)',
+                    filters,
+                    false // Ya chequeamos la restricción
+                );
+            }
+
+            // Gráfico 3: Pie Chart (Distribución de Préstamos por Tipo de Usuario) - No afectado por la restricción de datos de junio
+            fetchDataAndDraw(
+                'prestamos_por_tipo_usuario', 
+                drawPieChart, 
+                'pie_chart_div', 
+                'Distribución de Préstamos por Tipo de Usuario',
+                filters,
+                false // Sin restricción
+            );
+
+            // Gráfico 4: Stacked Bar Chart (Comparativo Bibliográficos vs Audiovisuales) - AFECTADO
+            if (isMonthRestricted) {
+                document.getElementById('stacked_bar_chart_div').innerHTML = 
+                    `<p style="color: #ffd700; text-align: center; margin-top: 50px;">
+                        🚨 **Datos solo disponibles para el mes de Junio (06).**
+                    </p>`;
+            } else {
+                fetchDataAndDraw(
+                    'prestamos_tipo_material', 
+                    drawStackedBarChart, 
+                    'stacked_bar_chart_div', 
+                    'Comparativo Mensual Bibliográficos vs Audiovisuales',
+                    filters,
+                    false // Ya chequeamos la restricción
+                );
+            }
+        }
+
+        // Función genérica para obtener datos de la API
+        function fetchDataAndDraw(queryName, drawFunction, elementId, title, filters, isRestricted = false) {
+            const url = `${BASE_API_URL}${queryName}?${filters}`;
+            
+            fetch(url)
+                .then(response => {
+                    if (!response.ok) {
+                        // En caso de error 500 del servidor, lo manejamos con un mensaje de error
+                        throw new Error(`Error en la API: ${response.statusText}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data && data.length > 0) {
+                        drawFunction(data, elementId, title);
+                    } else {
+                        // Si el backend no devuelve datos (data.length === 0)
+                        document.getElementById(elementId).innerHTML = `<p style="color: #dc3545; text-align: center; margin-top: 50px;">🚨 No hay datos disponibles para ${title} con los filtros seleccionados.</p>`;
+                    }
+                })
+                .catch(error => {
+                    console.error(`Error fetching data for ${queryName}:`, error);
+                    document.getElementById(elementId).innerHTML = `<p style="color: #dc3545; text-align: center; margin-top: 50px;">❌ Error al conectar con la base de datos para ${title}.</p>`;
+                });
+        }
+
+        // ----------------------------------------------------------------------
+        // 2. FUNCIONES DE DIBUJO DE GRÁFICOS (Mantenidas de tu código)
+        // ----------------------------------------------------------------------
+
+        // Gráfico 1: Column Chart (Préstamos vs Devoluciones)
+        function drawColumnChart(apiData, elementId, title) {
+            var dataArray = [['Mes', 'Préstamos', 'Devoluciones']];
+            apiData.forEach(item => {
+                dataArray.push([
+                    item.periodo, 
+                    parseInt(item.total_prestamos), 
+                    parseInt(item.total_devoluciones)
+                ]);
+            });
+
+            var data = google.visualization.arrayToDataTable(dataArray);
+            var options = {
+                title: title,
+                chartArea: {width: '80%'},
+                backgroundColor: BG_COLOR,
+                colors: [CHART_COLORS[0], CHART_COLORS[1]],
+                legend: { textStyle: TEXT_STYLE },
+                titleTextStyle: TITLE_STYLE,
+                hAxis: { title: 'Periodo', titleTextStyle: TEXT_STYLE, textStyle: TEXT_STYLE },
+                vAxis: { minValue: 0, textStyle: TEXT_STYLE, gridlines: { color: '#333' } },
+            };
+
+            var chart = new google.visualization.ColumnChart(document.getElementById(elementId));
+            chart.draw(data, options);
+        }
+
+        // Gráfico 2: Line Chart (Tendencia de Préstamos por Tipo de Material)
+        function drawLineChart(apiData, elementId, title) {
+            const pivotedData = pivotDataForLineChart(apiData);
+
+            var data = google.visualization.arrayToDataTable(pivotedData);
+            var options = {
+                title: title,
+                curveType: 'function',
+                legend: { position: 'bottom', textStyle: TEXT_STYLE },
+                backgroundColor: BG_COLOR,
+                colors: [CHART_COLORS[2], CHART_COLORS[3]],
+                titleTextStyle: TITLE_STYLE,
+                hAxis: { title: 'Mes/Año', titleTextStyle: TEXT_STYLE, textStyle: TEXT_STYLE },
+                vAxis: { title: 'Total Préstamos', titleTextStyle: TEXT_STYLE, textStyle: TEXT_STYLE, gridlines: { color: '#333' } },
+                chartArea: { width: '85%', height: '75%' }
+            };
+
+            var chart = new google.visualization.LineChart(document.getElementById(elementId));
+            chart.draw(data, options);
+        }
+
+        // Gráfico 3: Pie Chart (Distribución de Préstamos por Tipo de Usuario)
+        function drawPieChart(apiData, elementId, title) {
+            var dataArray = [['Tipo de Usuario', 'Total Préstamos']];
+            apiData.forEach(item => {
+                dataArray.push([
+                    item.nombre_tipo_usuario, 
+                    parseInt(item.total_prestamos)
+                ]);
+            });
+
+            var data = google.visualization.arrayToDataTable(dataArray);
+            var options = {
+                title: title,
+                pieHole: 0.4, // Gráfico de Donut
+                backgroundColor: BG_COLOR,
+                legend: { textStyle: TEXT_STYLE },
+                titleTextStyle: TITLE_STYLE,
+                colors: CHART_COLORS,
+                sliceVisibilityThreshold: 0.01 // Muestra incluso slices pequeñas
+            };
+
+            var chart = new google.visualization.PieChart(document.getElementById(elementId));
+            chart.draw(data, options);
+        }
+
+        // Gráfico 4: Stacked Bar Chart (Comparativo Bibliográficos vs Audiovisuales)
+        function drawStackedBarChart(apiData, elementId, title) {
+             // Reutilizamos la función de pivot para obtener el formato necesario
+            const pivotedData = pivotDataForLineChart(apiData); 
+
+            var data = google.visualization.arrayToDataTable(pivotedData);
+            var options = {
+                title: title,
+                isStacked: true, // ¡Clave para el Stacked Bar!
+                backgroundColor: BG_COLOR,
+                colors: [CHART_COLORS[0], CHART_COLORS[1]],
+                legend: { position: 'top', maxLines: 3, textStyle: TEXT_STYLE },
+                titleTextStyle: TITLE_STYLE,
+                hAxis: { title: 'Total Préstamos', titleTextStyle: TEXT_STYLE, textStyle: TEXT_STYLE, minValue: 0, gridlines: { color: '#333' } },
+                vAxis: { title: 'Mes/Año', titleTextStyle: TEXT_STYLE, textStyle: TEXT_STYLE },
+                chartArea: { width: '70%', height: '80%' }
+            };
+
+            var chart = new google.visualization.BarChart(document.getElementById(elementId));
+            chart.draw(data, options);
+        }
+
+        // ----------------------------------------------------------------------
+        // 3. FUNCIONES DE UTILIDAD (Mantenidas de tu código)
+        // ----------------------------------------------------------------------
+
+        // Función para transformar datos para Line Chart y Stacked Bar Chart
+        function pivotDataForLineChart(apiData) {
+            const periods = [...new Set(apiData.map(item => item.periodo))].sort();
+            const materialTypes = [...new Set(apiData.map(item => item.tipo_material.trim()))].sort();
+            
+            const header = ['Periodo', ...materialTypes];
+            const rows = [];
+
+            periods.forEach(period => {
+                const row = [period];
+                materialTypes.forEach(type => {
+                    const item = apiData.find(d => d.periodo === period && d.tipo_material.trim() === type); 
+                    
+                    row.push(item ? parseInt(item.total_prestamos) : 0);
+                });
+                rows.push(row);
+            });
+
+            return [header, ...rows];
+        }
+        
+    </script>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-content">
+    <h2>📊 USO Y FLUJO DE PRÉSTAMOS</h2>
+    <p class="text-center" style="color: #ffd700;">Dinámica general del servicio de préstamo: evolución y comportamiento por tipo de material y usuario.</p>
+    
+    <div style="background-color: #000; padding: 15px; border-radius: 5px; margin-bottom: 30px;">
+        <label style="color: #ffd700;">Filtro por Mes:</label>
+        <select id="filter-mes" onchange="fetchAndDrawAllCharts()" style="background-color: #333; color: #fff; border: 1px solid #555;">
+            <option value="">Todos</option>
+            <option value="01">Enero</option>
+            <option value="02">Febrero</option>
+            <option value="03">Marzo</option>
+            <option value="04">Abril</option>
+            <option value="05">Mayo</option>
+            <option value="06">Junio</option>
+            <option value="07">Julio</option>
+            <option value="08">Agosto</option>
+            <option value="09">Septiembre</option>
+            <option value="10">Octubre</option>
+            <option value="11">Noviembre</option>
+            <option value="12">Diciembre</option>
+        </select>
+        
+        <label style="color: #ffd700; margin-left: 20px;">Tipo de Material:</label>
+        <select id="filter-material" onchange="fetchAndDrawAllCharts()" style="background-color: #333; color: #fff; border: 1px solid #555;">
+            <option value="">Todos</option>
+            <option value="Bibliográfico">Bibliográfico</option> 
+            <option value="Audiovisual">Audiovisual</option>
+        </select>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6">
+            <h3>Préstamos y Devoluciones por Mes (Column Chart)</h3>
+            <div id="column_chart_div" class="chart-container">Cargando gráfico...</div>
+        </div>
+        
+        <div class="col-md-6">
+            <h3>Distribución de Préstamos por Tipo de Usuario (Pie Chart)</h3>
+            <div id="pie_chart_div" class="chart-container">Cargando gráfico...</div>
+        </div>
+    </div>
+    
+    <div class="row" style="margin-top: 30px;">
+        <div class="col-md-6">
+            <h3>Tendencia de Préstamos por Tipo de Material (Line Chart)</h3>
+            <div id="line_chart_div" class="chart-container">Cargando gráfico...</div>
+        </div>
+        
+        <div class="col-md-6">
+            <h3>Comparativo Mensual de Préstamos (Stacked Bar Chart)</h3>
+            <div id="stacked_bar_chart_div" class="chart-container">Cargando gráfico...</div>
+        </div>
+    </div>
+</div>
+{% endblock %}

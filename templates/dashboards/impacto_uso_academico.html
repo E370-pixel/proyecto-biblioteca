@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Impacto y Uso Académico</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+    <style>
+        body {
+            background-color: #1a1a2e; /* Fondo oscuro */
+            color: #e4e4e4;
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+        .chart-container {
+            background-color: #24243e;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.4);
+            margin-bottom: 30px;
+        }
+        h1 {
+            color: #ffcc00; /* Dorado para el título principal */
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 2.5rem;
+        }
+        .filter-control {
+            background-color: #000;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+        }
+        .filter-control label {
+            color: #ffd700;
+            font-weight: 600;
+        }
+        .filter-control input[type="date"] {
+            background-color: #333;
+            color: #fff;
+            border: 1px solid #555;
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <h1 class="text-3xl font-bold">📚 Impacto y Uso Académico</h1>
+
+    <!-- Controles de Filtro de Rango de Fecha -->
+    <div class="filter-control">
+        <label for="filter-inicio">Fecha de Inicio:</label>
+        <input type="date" id="filter-inicio" onchange="fetchAndDrawAllCharts()">
+        
+        <label for="filter-fin">Fecha de Fin:</label>
+        <input type="date" id="filter-fin" onchange="fetchAndDrawAllCharts()">
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <!-- Gráfico 1: Préstamos por Departamento (Column Chart) -->
+        <div class="chart-container">
+            <h2 class="text-xl font-semibold mb-4 text-white">Préstamos por Departamento/Carrera</h2>
+            <div id="column_chart_departamento" class="h-96"></div>
+        </div>
+
+        <!-- Gráfico 2: Frecuencia de préstamo por día de la semana (Line Chart) -->
+        <div class="chart-container">
+            <h2 class="text-xl font-semibold mb-4 text-white">Frecuencia de Préstamo por Día de la Semana</h2>
+            <div id="line_chart_frecuencia" class="h-96"></div>
+        </div>
+
+        <!-- Gráfico 3: Proporción Libros vs Audiovisuales (Pie Chart) -->
+        <div class="chart-container md:col-span-2">
+            <h2 class="text-xl font-semibold mb-4 text-white">Proporción de Material Prestado (Libros vs Audiovisuales)</h2>
+            <div id="pie_chart_proporcion" class="h-96"></div>
+        </div>
+    </div>
+
+    <script type="text/javascript">
+        // Google Charts
+        google.charts.load('current', {'packages':['corechart', 'bar']});
+        google.charts.setOnLoadCallback(fetchAndDrawAllCharts);
+
+        const BASE_API_URL = '/api/data/';
+
+        // --- FUNCIONES DE DIBUJO ---
+
+        // Función de Dibujo para Gráfico de Columna/Barras
+        function drawColumnChart(data, elementId, title) {
+            const dataTable = new google.visualization.DataTable();
+            dataTable.addColumn('string', 'Departamento');
+            dataTable.addColumn('number', 'Total Préstamos');
+            
+            const rows = data.map(row => [row.nombre, row.total_prestamos]);
+            dataTable.addRows(rows);
+
+            const options = {
+                title: title,
+                backgroundColor: 'transparent',
+                legend: { position: 'none' },
+                hAxis: { title: 'Departamento', textStyle: { color: '#e4e4e4' } },
+                vAxis: { title: 'Total Préstamos', textStyle: { color: '#e4e4e4' }, gridlines: { color: '#333' } },
+                colors: ['#3e9dff'],
+                titleTextStyle: { color: '#fff' }
+            };
+
+            const chart = new google.visualization.ColumnChart(document.getElementById(elementId));
+            chart.draw(dataTable, options);
+        }
+
+        // Función de Dibujo para Gráfico de Línea
+        function drawLineChart(data, elementId, title) {
+            const dataTable = new google.visualization.DataTable();
+            dataTable.addColumn('string', 'Día');
+            dataTable.addColumn('number', 'Préstamos');
+            
+            // Mapeo para ordenar días de la semana (asumiendo que vienen en español)
+            const order = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+            const sortedData = data.sort((a, b) => order.indexOf(a.dia_semana) - order.indexOf(b.dia_semana));
+
+            const rows = sortedData.map(row => [row.dia_semana, row.prestamos]);
+            dataTable.addRows(rows);
+
+            const options = {
+                title: title,
+                backgroundColor: 'transparent',
+                curveType: 'function',
+                legend: { position: 'bottom', textStyle: { color: '#e4e4e4' } },
+                hAxis: { textStyle: { color: '#e4e4e4' } },
+                vAxis: { title: 'Préstamos', textStyle: { color: '#e4e4e4' }, gridlines: { color: '#333' } },
+                series: { 0: { color: '#ffcc00' } },
+                titleTextStyle: { color: '#fff' }
+            };
+
+            const chart = new google.visualization.LineChart(document.getElementById(elementId));
+            chart.draw(dataTable, options);
+        }
+        
+        // Función de Dibujo para Gráfico de Tarta
+        function drawPieChart(data, elementId, title) {
+            const dataTable = new google.visualization.DataTable();
+            dataTable.addColumn('string', 'Tipo de Material');
+            dataTable.addColumn('number', 'Cantidad');
+            
+            const rows = data.map(row => [row.tipo_material, row.cantidad_prestamos]);
+            dataTable.addRows(rows);
+
+            const options = {
+                title: title,
+                backgroundColor: 'transparent',
+                is3D: true,
+                titleTextStyle: { color: '#fff' },
+                legend: { textStyle: { color: '#e4e4e4' } },
+                pieSliceText: 'percentage',
+                colors: ['#4caf50', '#ff9800'] // Verde y Naranja
+            };
+
+            const chart = new google.visualization.PieChart(document.getElementById(elementId));
+            chart.draw(dataTable, options);
+        }
+
+        // --- LÓGICA DE DATOS Y FILTROS ---
+
+        function fetchAndDrawAllCharts() {
+            // ⬇️ 1. Capturar los valores de los filtros de fecha
+            const fecha_inicio = document.getElementById('filter-inicio').value;
+            const fecha_fin = document.getElementById('filter-fin').value;
+
+            const filters = `fecha_inicio=${fecha_inicio}&fecha_fin=${fecha_fin}`;
+            
+            // Gráfico 1: Column Chart (Préstamos por Departamento)
+            fetchDataAndDraw(
+                'prestamos_por_departamento', 
+                drawColumnChart, 
+                'column_chart_departamento', 
+                'Préstamos por Departamento/Carrera',
+                filters
+            );
+
+            // Gráfico 2: Line Chart (Frecuencia por día de la semana)
+            fetchDataAndDraw(
+                'frecuencia_prestamos', 
+                drawLineChart, 
+                'line_chart_frecuencia', 
+                'Frecuencia de Préstamo por Día de la Semana',
+                filters
+            );
+
+            // Gráfico 3: Pie Chart (Proporción Libros vs Audiovisuales)
+            // NOTA: Este gráfico no usa filtros de fecha por la naturaleza de la query original, 
+            // pero enviamos los filtros al backend que ya sabe cómo ignorarlos.
+            fetchDataAndDraw(
+                'proporcion_material', 
+                drawPieChart, 
+                'pie_chart_proporcion', 
+                'Proporción de Material Prestado',
+                filters
+            );
+        }
+
+        function fetchDataAndDraw(queryName, drawFunction, elementId, title, filters) {
+            const url = `${BASE_API_URL}${queryName}?${filters}`;
+            
+            fetch(url)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Error en la API: ${response.statusText}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data && data.length > 0) {
+                        drawFunction(data, elementId, title);
+                    } else {
+                        document.getElementById(elementId).innerHTML = `<p class="text-red-400">🚨 No hay datos disponibles para ${title} con los filtros seleccionados.</p>`;
+                    }
+                })
+                .catch(error => {
+                    console.error(`Error fetching data for ${queryName}:`, error);
+                    document.getElementById(elementId).innerHTML = `<p class="text-red-400">❌ Error al conectar con la base de datos para ${title}. Detalles: ${error.message}</p>`;
+                });
+        }
+    </script>
+</body>
+</html>

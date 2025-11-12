@@ -1,0 +1,457 @@
+{% extends "base.html" %}
+
+{% block title %}Ciclo de Uso de Materiales (D3.js){% endblock %}
+
+{% block head_scripts %}
+    <!-- D3.js y Sankey (ya incluidos en el HTML original del usuario, aquí se usa la carga CDN) -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
+    
+    <style>
+        .dashboard-content { padding: 20px; }
+        .chart-container { background-color: #24243e; border-radius: 12px; padding: 25px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.4); margin-bottom: 30px; }
+        h2 { color: #ffcc00; text-align: center; font-size: 2.5rem; margin-bottom: 20px; }
+        .filter-control { background-color: #000; padding: 15px; border-radius: 8px; margin-bottom: 30px; display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; align-items: center; }
+        .filter-control label, .filter-control select, .filter-control input { color: #ffd700; font-weight: 600; }
+        .filter-control input, .filter-control select { background-color: #333; color: #fff; border: 1px solid #555; padding: 8px 12px; border-radius: 6px; cursor: pointer; }
+        .tooltip { 
+            position: absolute; text-align: center; padding: 8px; font: 12px sans-serif; 
+            background: #e4e4e4; border: 0px; border-radius: 4px; pointer-events: none; opacity: 0; color: #1a1a2e; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+        /* Estilos para el SVG y texto de los gráficos D3 */
+        .axis text { fill: #e4e4e4; }
+        .axis path, .axis line { stroke: #e4e4e4; }
+    </style>
+    
+    <script>
+        const BASE_API_URL = '/api/data/';
+
+        // Asegurarse de que la función se ejecute después de que D3 esté cargado
+        document.addEventListener('DOMContentLoaded', fetchAndDrawAllCharts);
+
+        // Define colores para el Sankey (Flujo) y Heatmap
+        const color = d3.scaleOrdinal(d3.schemeCategory10);
+
+        // --- FUNCIONES DE DIBUJO D3.js ---
+
+        function drawSankeyChart(rawData, elementId, title) {
+            const container = d3.select(`#${elementId}`);
+            container.html(''); // Limpiar
+            
+            // Usar dimensiones del contenedor para hacerlo responsivo
+            const margin = { top: 10, right: 10, bottom: 10, left: 10 };
+            const containerWidth = container.node().clientWidth;
+            const width = containerWidth > 0 ? containerWidth - margin.left - margin.right : 800;
+            const height = 400 - margin.top - margin.bottom;
+
+            if (width <= 0) {
+                console.error("El contenedor no tiene ancho, no se dibuja Sankey.");
+                return;
+            }
+
+            const svg = container.append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+
+            // 1. Preprocesamiento: Construir nodos y enlaces (links)
+            const links = [];
+            const nodesMap = new Map();
+            let nodeIdCounter = 0;
+
+            function getNode(name, colorName) {
+                if (!nodesMap.has(name)) {
+                    nodesMap.set(name, { name: name, node: nodeIdCounter++, colorName: colorName });
+                }
+                return nodesMap.get(name);
+            }
+
+            rawData.forEach(d => {
+                // Aquí el Sankey se basa en el flujo del ID del ítem (Inventario)
+                const recurso = getNode(d.recurso, 'recurso');
+                const inventario = getNode(`Inv-${d.idInventario}`, 'inventario');
+                const prestamo = d.idPrestamo ? getNode(`P-${d.idPrestamo}`, 'prestamo') : null;
+                const devolucion = d.idDevolucion ? getNode(`D-${d.idDevolucion}`, 'devolucion') : null;
+
+                // Flujo: Recurso -> Inventario (siempre existe)
+                links.push({ source: recurso.node, target: inventario.node, value: 1 });
+
+                // Flujo: Inventario -> Préstamo
+                if (prestamo) {
+                    links.push({ source: inventario.node, target: prestamo.node, value: 1 });
+                    
+                    // Flujo: Préstamo -> Devolución
+                    if (devolucion) {
+                        links.push({ source: prestamo.node, target: devolucion.node, value: 1 });
+                    }
+                }
+            });
+
+            // Agrupar enlaces duplicados y sumar valores
+            const aggregatedLinks = Array.from(d3.group(links, l => `${l.source}-${l.target}`), 
+                ([key, group]) => ({
+                    source: group[0].source,
+                    target: group[0].target,
+                    value: d3.sum(group, d => d.value)
+                })
+            );
+
+            const graph = { 
+                nodes: Array.from(nodesMap.values()).map(d => ({id: d.node, name: d.name, colorName: d.colorName})), 
+                links: aggregatedLinks 
+            };
+
+            // 2. Crear el generador Sankey
+            const sankey = d3.sankey()
+                .nodeId(d => d.id)
+                .nodeWidth(15)
+                .nodePadding(10)
+                .extent([[1, 1], [width - 1, height - 6]]);
+
+            const { nodes, links: sankeyLinks } = sankey({
+                nodes: graph.nodes.map(d => Object.assign({}, d)),
+                links: graph.links.map(d => Object.assign({}, d))
+            });
+
+            // 3. Dibujar enlaces (Links)
+            const link = svg.append("g")
+                .attr("fill", "none")
+                .attr("stroke-opacity", 0.5)
+                .selectAll("g")
+                .data(sankeyLinks)
+                .join("g")
+                .style("mix-blend-mode", "multiply");
+
+            link.append("path")
+                .attr("d", d3.sankeyLinkHorizontal())
+                .attr("stroke", d => color(d.source.colorName)) // Color basado en el nodo fuente
+                .attr("stroke-width", d => Math.max(1, d.width));
+                
+            // Tooltip para enlaces
+            link.append("title")
+                .text(d => `${d.source.name} → ${d.target.name}\nCantidad: ${d.value}`);
+
+
+            // 4. Dibujar nodos (Nodes)
+            const node = svg.append("g")
+                .attr("font-family", "sans-serif")
+                .attr("font-size", 10)
+                .selectAll("g")
+                .data(nodes)
+                .join("g");
+
+            node.append("rect")
+                .attr("x", d => d.x0)
+                .attr("y", d => d.y0)
+                .attr("height", d => d.y1 - d.y0)
+                .attr("width", d => d.x1 - d.x0)
+                .attr("fill", d => color(d.colorName))
+                .attr("stroke", "#000");
+
+            node.append("text")
+                .attr("x", d => d.x0 < width / 2 ? d.x1 + 6 : d.x0 - 6)
+                .attr("y", d => (d.y1 + d.y0) / 2)
+                .attr("dy", "0.35em")
+                .attr("text-anchor", d => d.x0 < width / 2 ? "start" : "end")
+                .text(d => d.name)
+                .attr("fill", "#e4e4e4");
+                
+            // Tooltip para nodos
+            node.append("title")
+                .text(d => `${d.name}\nValor Total: ${d.value}`);
+        }
+
+        function drawHeatmapChart(rawData, elementId, title) {
+            const container = d3.select(`#${elementId}`);
+            container.html(''); // Limpiar
+            const margin = { top: 30, right: 30, bottom: 60, left: 100 };
+            const containerWidth = container.node().clientWidth;
+            const width = containerWidth > 0 ? containerWidth - margin.left - margin.right : 400;
+            const height = 400 - margin.top - margin.bottom;
+
+            const svg = container.append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+            
+            // Reordenar días de la semana y tipos de material
+            const days = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+            const types = Array.from(new Set(rawData.map(d => d.tipo_material))).sort();
+            
+            // Mapeo de datos para facilitar la búsqueda
+            const dataMap = new Map();
+            rawData.forEach(d => {
+                dataMap.set(`${d.dia_semana}-${d.tipo_material}`, parseInt(d.total));
+            });
+            
+            // Escalas
+            const x = d3.scaleBand()
+                .range([0, width])
+                .domain(days)
+                .padding(0.05);
+
+            const y = d3.scaleBand()
+                .range([height, 0])
+                .domain(types)
+                .padding(0.05);
+
+            const maxTotal = d3.max(rawData, d => parseInt(d.total));
+            const myColor = d3.scaleSequential()
+                .interpolator(d3.interpolateYlOrRd)
+                .domain([0, maxTotal > 0 ? maxTotal : 1]); // Evitar dominio [0, 0]
+
+            // Ejes
+            svg.append("g")
+                .attr("class", "axis")
+                .attr("transform", `translate(0,${height})`)
+                .call(d3.axisBottom(x).tickSize(0))
+                .selectAll("text") // Rotar etiquetas del eje X si son largas
+                .attr("transform", "translate(0,0)rotate(-45)")
+                .style("text-anchor", "end");
+
+            svg.append("g")
+                .attr("class", "axis")
+                .call(d3.axisLeft(y).tickSize(0));
+
+            // Tooltip D3
+            const tooltip = d3.select("body").append("div")
+                .attr("class", "tooltip")
+                .style("opacity", 0);
+
+            // Dibujar Celdas
+            days.forEach(day => {
+                types.forEach(type => {
+                    const total = dataMap.get(`${day}-${type}`) || 0;
+                    svg.append("rect")
+                        .attr("x", x(day))
+                        .attr("y", y(type))
+                        .attr("rx", 4)
+                        .attr("ry", 4)
+                        .attr("width", x.bandwidth())
+                        .attr("height", y.bandwidth())
+                        .style("fill", myColor(total))
+                        .style("stroke-width", 2)
+                        .style("stroke", total > 0 ? "#1a1a2e" : "none") // Borde oscuro para celdas con valor
+                        .style("opacity", 0.9)
+                        .on("mouseover", function(event) {
+                            d3.select(this).style("stroke", "#ffd700").style("opacity", 1);
+                            tooltip.transition().duration(200).style("opacity", .9);
+                            tooltip.html(`Día: ${day}<br>Material: ${type}<br>Préstamos: ${total}`)
+                                .style("left", (event.pageX + 10) + "px")
+                                .style("top", (event.pageY - 28) + "px");
+                        })
+                        .on("mouseleave", function(d) {
+                            d3.select(this).style("stroke", total > 0 ? "#1a1a2e" : "none").style("opacity", 0.9);
+                            tooltip.transition().duration(500).style("opacity", 0);
+                        });
+                });
+            });
+            
+            // Leyenda de Color (Simple)
+            if (maxTotal > 0) {
+                const legendScale = d3.scaleLinear().domain([0, maxTotal]).range([0, 150]);
+                const legendAxis = d3.axisRight(legendScale).ticks(5);
+                
+                const legend = svg.append("g")
+                    .attr("transform", `translate(${width + 10}, 0)`);
+                    
+                legend.append("g")
+                    .attr("class", "axis")
+                    .call(legendAxis);
+                    
+                legend.append("text")
+                    .attr("transform", "rotate(90)")
+                    .attr("y", -9)
+                    .attr("dy", ".71em")
+                    .style("text-anchor", "end")
+                    .style("fill", "#e4e4e4")
+                    .text("Préstamos");
+
+                // Crear el gradiente de color para la leyenda (omito gradiente SVG por complejidad, uso bloques)
+            }
+        }
+
+        function drawTimelineChart(rawData, elementId, title) {
+            const container = d3.select(`#${elementId}`);
+            container.html(''); // Limpiar
+            const items = rawData.length;
+
+            const svg = container.append("svg")
+                .attr("width", container.node().clientWidth)
+                .attr("height", 400);
+
+            svg.append("text")
+                .attr("x", container.node().clientWidth / 2)
+                .attr("y", 150)
+                .attr("text-anchor", "middle")
+                .attr("font-size", "24px")
+                .attr("fill", "#ffd700")
+                .text(`Total de Ítems en Ciclo de Vida: ${items}`);
+            
+            svg.append("text")
+                .attr("x", container.node().clientWidth / 2)
+                .attr("y", 180)
+                .attr("text-anchor", "middle")
+                .attr("font-size", "14px")
+                .attr("fill", "#e4e4e4")
+                .text(`(Una visualización D3.js de Timeline real se implementaría aquí usando D3.time.scale, mostrando los eventos por ID de Inventario)`);
+        }
+        
+        // --- LÓGICA DE DATOS Y FILTROS ---
+
+        function fetchAndDrawAllCharts() {
+            // 1. Capturar todos los filtros
+            const fecha_inicio = document.getElementById('filter-inicio').value;
+            const fecha_fin = document.getElementById('filter-fin').value;
+            const material = document.getElementById('filter-material').value;
+            const usuario = document.getElementById('filter-usuario').value; // <-- Cambio de filter-user a filter-usuario
+            
+            const filters = `fecha_inicio=${fecha_inicio}&fecha_fin=${fecha_fin}&material=${material}&usuario=${usuario}`;
+            
+            // Gráfico 1: Sankey (Flujo Recurso)
+            fetchDataAndDraw(
+                'flujo_material', 
+                drawSankeyChart, 
+                'sankey_chart', 
+                'Flujo Recurso → Inventario → Préstamo → Devolución',
+                filters
+            );
+
+            // Gráfico 2: Heatmap (Préstamos por Día)
+            fetchDataAndDraw(
+                'prestamos_por_dia', 
+                drawHeatmapChart, 
+                'heatmap_chart', 
+                'Préstamos por Día de la Semana y Tipo de Material',
+                filters
+            );
+            
+            // Gráfico 3: Timeline (Ciclo de Vida)
+            fetchDataAndDraw(
+                'ciclo_vida_items', 
+                drawTimelineChart, 
+                'timeline_chart', 
+                'Ciclo de Vida de Ítems',
+                filters
+            );
+        }
+        
+        function fetchDataAndDraw(queryName, drawFunction, elementId, title, filters) {
+            const url = `${BASE_API_URL}${queryName}?${filters}`;
+            d3.select(`#${elementId}`).html(`<p class="text-center text-blue-400">Cargando datos para ${title}...</p>`);
+
+            fetch(url)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Error en la API: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Si el error 500 del backend retorna un JSON, lo capturamos aquí
+                    if (data && data.error) {
+                        d3.select(`#${elementId}`).html(`<p class="text-center text-red-400">❌ Error de Base de Datos: ${data.error}</p>`);
+                        return;
+                    }
+                    
+                    if (data && data.length > 0) {
+                        drawFunction(data, elementId, title);
+                    } else {
+                        d3.select(`#${elementId}`).html(`<p class="text-center text-red-400">🚨 No hay datos disponibles para ${title} con los filtros seleccionados.</p>`);
+                    }
+                })
+                .catch(error => {
+                    console.error(`Error fetching data for ${queryName}:`, error);
+                    d3.select(`#${elementId}`).html(`<p class="text-center text-red-400">❌ Error al conectar con la base de datos para ${title}. Detalles: Error en la API.</p>`);
+                });
+        }
+    </script>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-content">
+    <h2 class="text-3xl font-bold">♻️ Ciclo de Uso de Materiales (D3.js)</h2>
+    <p class="text-center" style="color: #ffcc00;">Análisis del ciclo de vida de los materiales, desde la adquisición hasta la devolución.</p>
+
+    <!-- Controles de Filtro -->
+    <div class="filter-control">
+        
+        <!-- Filtro Fecha Inicio -->
+        <div>
+            <label for="filter-inicio">Fecha Inicio:</label>
+            <input type="date" id="filter-inicio" onchange="fetchAndDrawAllCharts()">
+        </div>
+        
+        <!-- Filtro Fecha Fin -->
+        <div>
+            <label for="filter-fin">Fecha Fin:</label>
+            <input type="date" id="filter-fin" onchange="fetchAndDrawAllCharts()">
+        </div>
+        
+        <!-- Filtro Tipo Material -->
+        <div>
+            <label for="filter-material">Tipo Material:</label>
+            <select id="filter-material" onchange="fetchAndDrawAllCharts()">
+                <option value="">Todos</option>
+                <option value="Bibliográfico">Bibliográfico</option>
+                <option value="Audiovisual">Audiovisual</option>
+            </select>
+        </div>
+        
+        <!-- Filtro Usuario (Corregido a SELECT desplegable) -->
+        <div>
+            <label for="filter-usuario">Usuario ID:</label>
+            <select id="filter-usuario" onchange="fetchAndDrawAllCharts()">
+                <option value="">Todos</option>
+                <option value="bib_admin1">bib_admin1</option>
+                <option value="bib_admin2">bib_admin2</option>
+                <option value="bib_admin3">bib_admin3</option>
+                <option value="prof_jgomez">prof_jgomez</option>
+                <option value="prof_mlopez">prof_mlopez</option>
+                <option value="prof_arias">prof_arias</option>
+                <option value="est_u123">est_u123</option>
+                <option value="est_u456">est_u456</option>
+                <option value="est_u789">est_u789</option>
+                <option value="inv_gutierrez">inv_gutierrez</option>
+                <option value="inv_ramirez">inv_ramirez</option>
+                <option value="inv_quezada">inv_quezada</option>
+                <option value="est_agr001">est_agr001</option>
+                <option value="est_agr002">est_agr002</option>
+                <option value="est_agr003">est_agr003</option>
+                <option value="est_bio001">est_bio001</option>
+                <option value="est_env001">est_env001</option>
+                <option value="est_geo001">est_geo001</option>
+                <option value="est_ecol001">est_ecol001</option>
+                <option value="est_forest001">est_forest001</option>
+                <option value="est_doc001">est_doc001</option>
+                <option value="est_env002">est_env002</option>
+                <option value="est_perma01">est_perma01</option>
+                <option value="est_eco02">est_eco02</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <!-- Gráfico 1: Sankey Diagram -->
+        <div class="chart-container lg:col-span-3">
+            <h3 class="text-xl font-semibold mb-4 text-white text-center">Flujo Recurso → Inventario → Préstamo → Devolución</h3>
+            <div id="sankey_chart" class="h-96"></div>
+        </div>
+
+        <!-- Gráfico 2: Heatmap -->
+        <div class="chart-container lg:col-span-2">
+            <h3 class="text-xl font-semibold mb-4 text-white text-center">Préstamos por Día de la Semana y Tipo de Material</h3>
+            <div id="heatmap_chart" class="h-96"></div>
+        </div>
+
+        <!-- Gráfico 3: Timeline (Placeholder) -->
+        <div class="chart-container lg:col-span-1">
+            <h3 class="text-xl font-semibold mb-4 text-white text-center">Ciclo de Vida de Ítems (Ingreso a Devolución)</h3>
+            <div id="timeline_chart" class="h-96"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Adquisiciones y Catálogo (D3.js)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
+    <style>
+        body { background-color: #1a1a2e; color: #e4e4e4; font-family: 'Inter', sans-serif; }
+        .chart-container { background-color: #24243e; border-radius: 12px; padding: 25px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.4); margin-bottom: 30px; }
+        h1 { color: #ffcc00; text-align: center; font-size: 2.5rem; margin-bottom: 20px; }
+        .filter-control { background-color: #000; padding: 15px; border-radius: 8px; margin-bottom: 30px; display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; align-items: center; }
+        .filter-control label, .filter-control select { color: #ffd700; font-weight: 600; }
+        .filter-control input, .filter-control select { background-color: #333; color: #fff; border: 1px solid #555; padding: 8px 12px; border-radius: 6px; cursor: pointer; }
+        .tooltip { position: absolute; text-align: center; padding: 8px; font: 12px sans-serif; background: lightsteelblue; border: 0px; border-radius: 8px; pointer-events: none; opacity: 0; color: #000; }
+        .bubble-label { text-anchor: middle; font-size: 12px; fill: black; pointer-events: none; }
+    </style>
+</head>
+<body class="p-8">
+
+    <h1 class="text-3xl font-bold">🛒 Adquisiciones, Proveedores y Catálogo Vivo (D3.js)</h1>
+
+    <!-- Controles de Filtro -->
+    <div class="filter-control">
+        <label for="filter-anio">Año:</label>
+        <input type="number" id="filter-anio" placeholder="Ej: 2024" onchange="fetchAndDrawAllCharts()">
+        
+        <label for="filter-proveedor">Proveedor:</label>
+        <input type="text" id="filter-proveedor" placeholder="Ej: Libros SA" onchange="fetchAndDrawAllCharts()">
+        
+        <label for="filter-categoria">Categoría:</label>
+        <input type="text" id="filter-categoria" placeholder="Ej: Ficción" onchange="fetchAndDrawAllCharts()">
+        
+        <label for="filter-material">Fecha de Pedido (Fin):</label>
+        <input type="date" id="filter-fin" onchange="fetchAndDrawAllCharts()">
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <!-- Gráfico 1: TreeMap -->
+        <div class="chart-container lg:col-span-1">
+            <h2 class="text-xl font-semibold mb-4 text-white">Volumen de Materiales por Categoría Temática</h2>
+            <div id="treemap_chart" class="h-96"></div>
+        </div>
+
+        <!-- Gráfico 2: Sankey Diagram -->
+        <div class="chart-container lg:col-span-1">
+            <h2 class="text-xl font-semibold mb-4 text-white">Flujo Proveedor → Material → Cantidad</h2>
+            <div id="sankey_chart" class="h-96"></div>
+        </div>
+
+        <!-- Gráfico 3: Bubble Chart -->
+        <div class="chart-container lg:col-span-2">
+            <h2 class="text-xl font-semibold mb-4 text-white">Costo Promedio por Tipo de Material (Simulación)</h2>
+            <div id="bubble_chart" class="h-96"></div>
+        </div>
+    </div>
+
+    <script>
+        const BASE_API_URL = '/api/data/';
+
+        document.addEventListener('DOMContentLoaded', fetchAndDrawAllCharts);
+
+        const colorScale = d3.scaleOrdinal(d3.schemePaired);
+
+        // --- FUNCIONES DE DIBUJO D3.js ---
+
+        function drawTreeMapChart(rawData, elementId, title) {
+            const container = d3.select(`#${elementId}`);
+            container.html(''); // Limpiar
+            const margin = { top: 10, right: 10, bottom: 10, left: 10 };
+            const width = container.node().clientWidth - margin.left - margin.right;
+            const height = 400 - margin.top - margin.bottom;
+
+            const svg = container.append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+            
+            // 1. Crear Jerarquía
+            const root = d3.hierarchy({ 
+                name: "Catálogo", 
+                children: rawData.map(d => ({ name: d.categoria, value: d.total_titulos }))
+            }).sum(d => d.value);
+
+            // 2. Crear Treemap Layout
+            d3.treemap()
+                .size([width, height])
+                .padding(2)(root);
+
+            // 3. Dibujar Rectángulos
+            svg.selectAll("rect")
+                .data(root.leaves())
+                .join("rect")
+                .attr('x', d => d.x0)
+                .attr('y', d => d.y0)
+                .attr('width', d => d.x1 - d.x0)
+                .attr('height', d => d.y1 - d.y0)
+                .style("stroke", "black")
+                .style("fill", d => colorScale(d.parent.data.name));
+
+            // 4. Dibujar Etiquetas
+            svg.selectAll("text")
+                .data(root.leaves())
+                .join("text")
+                .attr("x", d => d.x0 + 5)
+                .attr("y", d => d.y0 + 20)
+                .text(d => d.data.name)
+                .attr("font-size", d => Math.min(15, (d.x1 - d.x0) / 6))
+                .attr("fill", "white")
+                .call(wrap, d3.select(this), 10, 5); 
+
+            svg.selectAll("vals")
+                .data(root.leaves())
+                .join("text")
+                .attr("x", d => d.x0 + 5)
+                .attr("y", d => d.y0 + 35)
+                .text(d => `${d.data.value} títulos`)
+                .attr("font-size", d => Math.min(12, (d.x1 - d.x0) / 8))
+                .attr("fill", "white");
+
+            // Función de ajuste de texto simple para Treemap
+            function wrap(text, node, lineheight, padding) {
+                text.each(function(d) {
+                    const textNode = d3.select(this);
+                    let words = textNode.text().split(/\s+/).reverse(),
+                        word,
+                        line = [],
+                        lineNumber = 0,
+                        lineHeight = lineheight, // px
+                        x = textNode.attr("x"),
+                        y = textNode.attr("y"),
+                        dy = 0,
+                        tspan = textNode.text(null).append("tspan").attr("x", x).attr("y", y).attr("dy", dy + "px");
+                    
+                    const rectWidth = d.x1 - d.x0 - padding;
+                    const rectHeight = d.y1 - d.y0 - padding;
+
+                    while (word = words.pop()) {
+                        line.push(word);
+                        tspan.text(line.join(" "));
+                        if (tspan.node().getComputedTextLength() > rectWidth && line.length > 1) {
+                            line.pop();
+                            tspan.text(line.join(" "));
+                            line = [word];
+                            if (lineNumber * lineHeight < rectHeight - 2 * lineHeight) {
+                                tspan = textNode.append("tspan").attr("x", x).attr("y", y).attr("dy", ++lineNumber * lineHeight + dy + "px").text(word);
+                            } else {
+                                // Evitar texto que se sale del límite
+                                words = []; 
+                            }
+                        }
+                    }
+                });
+            }
+        }
+
+        function drawSankeyChart(rawData, elementId, title) {
+            const container = d3.select(`#${elementId}`);
+            container.html(''); // Limpiar
+            const margin = { top: 10, right: 10, bottom: 10, left: 10 };
+            const width = container.node().clientWidth - margin.left - margin.right;
+            const height = 400 - margin.top - margin.bottom;
+
+            const svg = container.append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+
+            // 1. Preprocesamiento: Crear nodos y enlaces (links)
+            const links = [];
+            const nodesMap = new Map();
+            let nodeIdCounter = 0;
+
+            function getNode(name, type) {
+                const key = `${type}-${name}`;
+                if (!nodesMap.has(key)) {
+                    nodesMap.set(key, { name: name, node: nodeIdCounter++, type: type });
+                }
+                return nodesMap.get(key);
+            }
+
+            rawData.forEach(d => {
+                const proveedor = getNode(d.proveedor, 'Proveedor');
+                const recurso = getNode(d.recurso, 'Recurso');
+                
+                // Flujo: Proveedor -> Recurso
+                links.push({ 
+                    source: proveedor.node, 
+                    target: recurso.node, 
+                    value: d.cantidad 
+                });
+            });
+
+            // Agrupar enlaces duplicados y sumar valores
+            const aggregatedLinks = Array.from(d3.group(links, l => `${l.source}-${l.target}`), 
+                ([key, group]) => ({
+                    source: group[0].source,
+                    target: group[0].target,
+                    value: d3.sum(group, d => d.value)
+                })
+            );
+
+            const graph = { 
+                nodes: Array.from(nodesMap.values()).map(d => ({id: d.node, name: d.name, type: d.type})), 
+                links: aggregatedLinks 
+            };
+
+            // 2. Crear el generador Sankey
+            const sankey = d3.sankey()
+                .nodeId(d => d.id)
+                .nodeWidth(15)
+                .nodePadding(10)
+                .extent([[1, 1], [width - 1, height - 6]]);
+
+            const { nodes, links: sankeyLinks } = sankey({
+                nodes: graph.nodes.map(d => Object.assign({}, d)),
+                links: graph.links.map(d => Object.assign({}, d))
+            });
+
+            // 3. Dibujar enlaces (Links)
+            const link = svg.append("g")
+                .attr("fill", "none")
+                .attr("stroke-opacity", 0.5)
+                .selectAll("g")
+                .data(sankeyLinks)
+                .join("g")
+                .style("mix-blend-mode", "multiply");
+
+            link.append("path")
+                .attr("d", d3.sankeyLinkHorizontal())
+                .attr("stroke", d => colorScale(d.source.type)) 
+                .attr("stroke-width", d => Math.max(1, d.width));
+
+            // 4. Dibujar nodos (Nodes)
+            const node = svg.append("g")
+                .attr("font-family", "sans-serif")
+                .attr("font-size", 10)
+                .selectAll("g")
+                .data(nodes)
+                .join("g");
+
+            node.append("rect")
+                .attr("x", d => d.x0)
+                .attr("y", d => d.y0)
+                .attr("height", d => d.y1 - d.y0)
+                .attr("width", d => d.x1 - d.x0)
+                .attr("fill", d => colorScale(d.type))
+                .attr("stroke", "#000");
+
+            node.append("text")
+                .attr("x", d => d.x0 < width / 2 ? d.x1 + 6 : d.x0 - 6)
+                .attr("y", d => (d.y1 + d.y0) / 2)
+                .attr("dy", "0.35em")
+                .attr("text-anchor", d => d.x0 < width / 2 ? "start" : "end")
+                .text(d => d.name)
+                .attr("fill", "#e4e4e4");
+        }
+
+        function drawBubbleChart(rawData, elementId, title) {
+            // Simulación de datos de Costo Promedio por Tipo de Material,
+            // ya que la vista vw_flujo_proveedor_catalogo no devuelve directamente el costo.
+            const container = d3.select(`#${elementId}`);
+            container.html(''); 
+            const width = container.node().clientWidth;
+            const height = 400;
+
+            const svg = container.append("svg")
+                .attr("width", width)
+                .attr("height", height);
+
+            const simulatedData = [
+                { name: "Libros (Media)", value: 55, count: 1500, label: "$55.00" },
+                { name: "Audiovisuales (Media)", value: 85, count: 500, label: "$85.00" },
+                { name: "Revistas (Media)", value: 20, count: 2000, label: "$20.00" }
+            ];
+
+            const maxValue = d3.max(simulatedData, d => d.value);
+            const maxCount = d3.max(simulatedData, d => d.count);
+
+            const radiusScale = d3.scaleSqrt()
+                .domain([0, maxCount])
+                .range([20, 100]); 
+
+            const nodes = simulatedData.map(d => ({
+                id: d.name,
+                radius: radiusScale(d.count),
+                value: d.value,
+                label: d.label
+            }));
+
+            const forceX = d3.forceX(d => width * (simulatedData.indexOf(d) + 1) / (simulatedData.length + 1)).strength(0.15);
+            const forceY = d3.forceY(height / 2).strength(0.15);
+            
+            const simulation = d3.forceSimulation(nodes)
+                .force("center", d3.forceCenter(width / 2, height / 2))
+                .force("x", forceX)
+                .force("y", forceY)
+                .force("charge", d3.forceManyBody().strength(30))
+                .force("collide", d3.forceCollide().radius(d => d.radius + 2).iterations(4));
+
+            const bubbles = svg.selectAll(".bubble")
+                .data(nodes)
+                .join("circle")
+                .attr("class", "bubble")
+                .attr("r", d => d.radius)
+                .attr("fill", (d, i) => colorScale(i))
+                .attr("stroke", "#fff")
+                .attr("stroke-width", 2);
+
+            const labels = svg.selectAll(".label")
+                .data(nodes)
+                .join("text")
+                .attr("class", "bubble-label")
+                .text(d => d.id)
+                .attr("font-size", d => Math.min(d.radius / 5, 12)) 
+                .attr("fill", "#000");
+
+            const values = svg.selectAll(".value")
+                .data(nodes)
+                .join("text")
+                .attr("class", "bubble-label")
+                .text(d => d.label)
+                .attr("dy", "1.2em")
+                .attr("font-size", d => Math.min(d.radius / 4, 14))
+                .attr("font-weight", "bold")
+                .attr("fill", "#000");
+
+            simulation.on("tick", () => {
+                bubbles
+                    .attr("cx", d => d.x)
+                    .attr("cy", d => d.y);
+                labels
+                    .attr("x", d => d.x)
+                    .attr("y", d => d.y - 10);
+                values
+                    .attr("x", d => d.x)
+                    .attr("y", d => d.y);
+            });
+            
+            svg.append("text").attr("x", 10).attr("y", 20).attr("fill", "#e4e4e4").text("Nota: El Bubble Chart muestra datos simulados de costo promedio.");
+        }
+        
+        // --- LÓGICA DE DATOS ---
+
+        function fetchAndDrawAllCharts() {
+            const anio = document.getElementById('filter-anio').value;
+            const proveedor = document.getElementById('filter-proveedor').value;
+            const categoria = document.getElementById('filter-categoria').value;
+            const fecha_fin = document.getElementById('filter-fin').value; // Usado como fecha de pedido 'fin'
+            
+            const filters = `anio=${anio}&proveedor=${proveedor}&categoria=${categoria}&fecha_fin=${fecha_fin}&fecha_inicio=1970-01-01`; // Rango amplio
+            
+            // Gráfico 1: TreeMap (Categorías de Materiales)
+            fetchDataAndDraw(
+                'categorias_materiales', 
+                drawTreeMapChart, 
+                'treemap_chart', 
+                'Volumen de Materiales por Categoría Temática',
+                filters
+            );
+
+            // Gráfico 2: Sankey (Flujo Proveedor)
+            fetchDataAndDraw(
+                'flujo_proveedor_catalogo', 
+                drawSankeyChart, 
+                'sankey_chart', 
+                'Flujo Proveedor → Material',
+                filters
+            );
+            
+            // Gráfico 3: Bubble Chart (Costo promedio, usa data simulada)
+            fetchDataAndDraw(
+                'catalogo_incorporaciones', // Usamos esta query solo para obtener el total de ítems como dummy data
+                drawBubbleChart, 
+                'bubble_chart', 
+                'Costo Promedio por Tipo de Material',
+                filters
+            );
+        }
+        
+        function fetchDataAndDraw(queryName, drawFunction, elementId, title, filters) {
+            const url = `${BASE_API_URL}${queryName}?${filters}`;
+            d3.select(`#${elementId}`).html(`<p class="text-center text-blue-400">Cargando datos para ${title}...</p>`);
+
+            fetch(url)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Error en la API: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data && data.length > 0) {
+                        drawFunction(data, elementId, title);
+                    } else {
+                        d3.select(`#${elementId}`).html(`<p class="text-center text-red-400">🚨 No hay datos disponibles para ${title} con los filtros seleccionados.</p>`);
+                    }
+                })
+                .catch(error => {
+                    console.error(`Error fetching data for ${queryName}:`, error);
+                    d3.select(`#${elementId}`).html(`<p class="text-center text-red-400">❌ Error al conectar con la base de datos para ${title}. Detalles: ${error.message}</p>`);
+                });
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}Inicio{% endblock %}
+
+{% block content %}
+<section class="hero-section">
+    <h1 class="hero-title">Bienvenidos a la **Biblioteca Virtual**</h1>
+    
+    <div id="libraryCarousel" class="carousel slide" data-bs-ride="carousel">
+        <div class="carousel-inner">
+            <div class="carousel-item active">
+                <img src="https://picsum.photos/1200/500?random=1" class="d-block w-100" alt="Biblioteca 1">
+            </div>
+            <div class="carousel-item">
+                <img src="https://picsum.photos/1200/500?random=2" class="d-block w-100" alt="Biblioteca 2">
+            </div>
+            <div class="carousel-item">
+                <img src="https://picsum.photos/1200/500?random=3" class="d-block w-100" alt="Biblioteca 3">
+            </div>
+        </div>
+        <button class="carousel-control-prev" type="button" data-bs-target="#libraryCarousel" data-bs-slide="prev">
+            <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+            <span class="visually-hidden">Previous</span>
+        </button>
+        <button class="carousel-control-next" type="button" data-bs-target="#libraryCarousel" data-bs-slide="next">
+            <span class="carousel-control-next-icon" aria-hidden="true"></span>
+            <span class="visually-hidden">Next</span>
+        </button>
+    </div>
+</section>
+
+<section class="text-section">
+    <h2>Explora Nuestro Universo de Conocimiento</h2>
+    <p>Sumérgete en una vasta colección de recursos académicos, libros especializados y material audiovisual, todo accesible desde la comodidad de tu hogar. Nuestra misión es apoyar la excelencia académica y la investigación. Usa la barra de navegación superior para explorar nuestros servicios y *dashboards* de gestión.</p>
+</section>
+{% endblock %}

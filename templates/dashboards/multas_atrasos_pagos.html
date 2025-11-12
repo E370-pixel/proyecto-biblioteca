@@ -1,0 +1,293 @@
+{% extends "base.html" %}
+
+{% block title %}Multas, Atrasos y Pagos{% endblock %}
+
+{% block head_scripts %}
+    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    
+    <script type="text/javascript">
+        google.charts.load('current', {'packages':['corechart', 'bar']});
+        google.charts.setOnLoadCallback(fetchAndDrawAllCharts);
+
+        const BASE_API_URL = '/api/data/';
+        
+        // Colores para la estética elegante oscura
+        const CHART_COLORS = ['#dc3545', '#ffc107', '#007bff', '#17a2b8'];
+        const TEXT_STYLE = { color: '#ccc' };
+        const TITLE_STYLE = { color: '#ffc107', fontSize: 16 };
+        const BG_COLOR = 'transparent';
+
+        // 1. Función principal para orquestar la carga de datos y el dibujo
+        function fetchAndDrawAllCharts() {
+            // ⬇️ Capturar los valores de los filtros
+            const mes = document.getElementById('filter-mes').value; // <-- CAPTURA DEL NUEVO FILTRO MES
+            const estado_multa = document.getElementById('filter-estado-multa').value;
+            const usuario = document.getElementById('filter-usuario').value;
+
+            // Filtros generales que aplican a la mayoría de los gráficos (usuario, estado_multa)
+            const filters_general = `estado_multa=${estado_multa}&usuario=${usuario}`;
+            
+            // Filtros específicos para el gráfico de multas mensuales (incluye el mes)
+            const filters_monthly = `mes=${mes}&${filters_general}`; 
+
+            // Gráfico 1: Multas Mensuales (Column Chart) - SOLO ESTE USA FILTRO DE MES
+            fetchDataAndDraw(
+                'multas_mensuales', 
+                drawColumnChart, 
+                'column_chart_div', 
+                'Monto de Multas Generadas por Periodo',
+                filters_monthly // <-- USA FILTRO CON MES
+            );
+
+            // Gráfico 2: Estado de Pago de Multas (Pie Chart) - NO USA FILTRO DE MES
+            fetchDataAndDraw(
+                'estado_pago_multas', 
+                drawPieChart, 
+                'pie_chart_div', 
+                'Distribución por Estado de Pago',
+                filters_general // <-- USA FILTRO GENERAL
+            );
+
+            // Gráfico 3: Usuarios con más Multas (Bar Chart) - NO USA FILTRO DE MES
+            fetchDataAndDraw(
+                'usuarios_con_mas_multas', 
+                drawBarChart, 
+                'bar_chart_div', 
+                'Top 10 Usuarios con Mayor Monto Acumulado',
+                filters_general // <-- USA FILTRO GENERAL
+            );
+
+            // Gráfico 4: Correlación Atraso vs Multa (Scatter Chart) - NO USA FILTRO DE MES
+            fetchDataAndDraw(
+                'correlacion_atraso', 
+                drawScatterChart, 
+                'scatter_chart_div', 
+                'Correlación Días de Atraso vs Monto de Multa',
+                filters_general // <-- USA FILTRO GENERAL
+            );
+        }
+
+        // Función genérica para obtener datos de la API
+        function fetchDataAndDraw(queryName, drawFunction, elementId, title, filters) {
+            const url = `${BASE_API_URL}${queryName}?${filters}`;
+            
+            fetch(url)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Error en la API: ${response.statusText}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data && data.length > 0) {
+                        drawFunction(data, elementId, title);
+                    } else {
+                        document.getElementById(elementId).innerHTML = `<p style="color: #dc3545;">🚨 No hay datos disponibles para ${title} con los filtros seleccionados.</p>`;
+                    }
+                })
+                .catch(error => {
+                    console.error(`Error fetching data for ${queryName}:`, error);
+                    document.getElementById(elementId).innerHTML = `<p style="color: #dc3545;">❌ Error al conectar con la base de datos para ${title}. Detalles: Error en la API.</p>`;
+                });
+        }
+
+        // ----------------------------------------------------------------------
+        // 2. FUNCIONES DE DIBUJO DE GRÁFICOS
+        // ----------------------------------------------------------------------
+
+        // Gráfico 1: Column Chart (Multas Mensuales)
+        function drawColumnChart(apiData, elementId, title) {
+            var dataArray = [['Periodo', 'Monto Total']];
+            apiData.forEach(item => {
+                dataArray.push([
+                    item.periodo, 
+                    parseFloat(item.monto_total)
+                ]);
+            });
+
+            var data = google.visualization.arrayToDataTable(dataArray);
+            var options = {
+                title: title,
+                chartArea: {width: '80%'},
+                backgroundColor: BG_COLOR,
+                colors: [CHART_COLORS[0]],
+                legend: { position: 'none' },
+                titleTextStyle: TITLE_STYLE,
+                hAxis: { title: 'Periodo', titleTextStyle: TEXT_STYLE, textStyle: TEXT_STYLE },
+                vAxis: { title: 'Monto ($)', titleTextStyle: TEXT_STYLE, textStyle: TEXT_STYLE, gridlines: { color: '#333' } },
+            };
+
+            var chart = new google.visualization.ColumnChart(document.getElementById(elementId));
+            chart.draw(data, options);
+        }
+
+        // Gráfico 2: Pie Chart (Estado de Pago)
+        function drawPieChart(apiData, elementId, title) {
+            var dataArray = [['Estado de Pago', 'Cantidad de Multas']];
+            apiData.forEach(item => {
+                dataArray.push([
+                    `${item.estado_pago} ($${parseFloat(item.total_monto).toFixed(2)})`, 
+                    parseInt(item.cantidad)
+                ]);
+            });
+
+            var data = google.visualization.arrayToDataTable(dataArray);
+            var options = {
+                title: title,
+                pieHole: 0.4, // Gráfico de Donut
+                backgroundColor: BG_COLOR,
+                legend: { textStyle: TEXT_STYLE },
+                titleTextStyle: TITLE_STYLE,
+                colors: [CHART_COLORS[0], CHART_COLORS[1]], // Pagado vs Pendiente
+                sliceVisibilityThreshold: 0.01 // Muestra incluso slices pequeñas
+            };
+
+            var chart = new google.visualization.PieChart(document.getElementById(elementId));
+            chart.draw(data, options);
+        }
+
+        // Gráfico 3: Bar Chart (Usuarios con más Multas)
+        function drawBarChart(apiData, elementId, title) {
+            var dataArray = [['Usuario', 'Monto Acumulado ($)', 'Cantidad de Multas']];
+            
+            // Ordenamos por monto_total (el campo que queremos en el eje X)
+            apiData.sort((a, b) => parseFloat(b.total_multas) - parseFloat(a.total_multas)).slice(0, 10).forEach(item => {
+                dataArray.push([
+                    item.usuario, 
+                    parseFloat(item.total_multas),
+                    parseInt(item.cantidad_multas)
+                ]);
+            });
+
+            var data = google.visualization.arrayToDataTable(dataArray);
+            var options = {
+                title: title,
+                isStacked: false,
+                backgroundColor: BG_COLOR,
+                colors: [CHART_COLORS[3], CHART_COLORS[1]],
+                legend: { position: 'top', textStyle: TEXT_STYLE },
+                titleTextStyle: TITLE_STYLE,
+                hAxis: { title: 'Monto Acumulado ($)', titleTextStyle: TEXT_STYLE, textStyle: TEXT_STYLE, minValue: 0, gridlines: { color: '#333' } },
+                vAxis: { title: 'Usuario', titleTextStyle: TEXT_STYLE, textStyle: TEXT_STYLE, textPosition: 'out' },
+                chartArea: { width: '70%', height: '80%' }
+            };
+
+            var chart = new google.visualization.BarChart(document.getElementById(elementId));
+            chart.draw(data, options);
+        }
+
+        // Gráfico 4: Scatter Chart (Correlación Atraso vs Multa)
+        function drawScatterChart(apiData, elementId, title) {
+            var dataArray = [['Días de Atraso', 'Monto de Multa ($)']];
+            apiData.forEach(item => {
+                dataArray.push([
+                    parseInt(item.dias_atraso), 
+                    parseFloat(item.monto)
+                ]);
+            });
+
+            var data = google.visualization.arrayToDataTable(dataArray);
+            var options = {
+                title: title,
+                backgroundColor: BG_COLOR,
+                colors: [CHART_COLORS[2]],
+                legend: { position: 'none' },
+                titleTextStyle: TITLE_STYLE,
+                hAxis: { title: 'Días de Atraso', titleTextStyle: TEXT_STYLE, textStyle: TEXT_STYLE, minValue: 0, gridlines: { color: '#333' } },
+                vAxis: { title: 'Monto ($)', titleTextStyle: TEXT_STYLE, textStyle: TEXT_STYLE, minValue: 0, gridlines: { color: '#333' } },
+                chartArea: { width: '80%', height: '80%' }
+            };
+
+            var chart = new google.visualization.ScatterChart(document.getElementById(elementId));
+            chart.draw(data, options);
+        }
+        
+    </script>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-content">
+    <h2>💰 MULTAS, ATRASOS Y PAGOS</h2>
+    <p class="text-center" style="color: #ffc107;">Análisis del comportamiento de multas generadas y su estado de pago.</p>
+    
+    <div style="background-color: #000; padding: 15px; border-radius: 5px; margin-bottom: 30px; display: flex; gap: 20px; justify-content: center;">
+        
+        <!-- Filtro por Mes (Cambio de Año a Mes) -->
+        <div>
+            <label style="color: #ffc107;">Filtro por Mes:</label>
+            <select id="filter-mes" onchange="fetchAndDrawAllCharts()" style="background-color: #333; color: #fff; border: 1px solid #555;">
+                <option value="">Todos</option>
+                <option value="06">06 - Junio</option>
+                <option value="07">07 - Julio</option>
+            </select>
+        </div>
+
+        <!-- Filtro por Estado de Multa -->
+        <div>
+            <label style="color: #ffc107;">Estado de Pago:</label>
+            <select id="filter-estado-multa" onchange="fetchAndDrawAllCharts()" style="background-color: #333; color: #fff; border: 1px solid #555;">
+                <option value="">Todos</option>
+                <option value="Pagado">Pagado</option> 
+                <option value="Pendiente">Pendiente</option>
+            </select>
+        </div>
+
+        <!-- Filtro por Usuario -->
+        <div>
+            <label style="color: #ffc107;">Usuario:</label>
+            <select id="filter-usuario" onchange="fetchAndDrawAllCharts()" style="background-color: #333; color: #fff; border: 1px solid #555;">
+                <option value="">Todos</option>
+                <option value="bib_admin1">bib_admin1</option>
+                <option value="bib_admin2">bib_admin2</option>
+                <option value="bib_admin3">bib_admin3</option>
+                <option value="prof_jgomez">prof_jgomez</option>
+                <option value="prof_mlopez">prof_mlopez</option>
+                <option value="prof_arias">prof_arias</option>
+                <option value="est_u123">est_u123</option>
+                <option value="est_u456">est_u456</option>
+                <option value="est_u789">est_u789</option>
+                <option value="inv_gutierrez">inv_gutierrez</option>
+                <option value="inv_ramirez">inv_ramirez</option>
+                <option value="inv_quezada">inv_quezada</option>
+                <option value="est_agr001">est_agr001</option>
+                <option value="est_agr002">est_agr002</option>
+                <option value="est_agr003">est_agr003</option>
+                <option value="est_bio001">est_bio001</option>
+                <option value="est_env001">est_env001</option>
+                <option value="est_geo001">est_geo001</option>
+                <option value="est_ecol001">est_ecol001</option>
+                <option value="est_forest001">est_forest001</option>
+                <option value="est_doc001">est_doc001</option>
+                <option value="est_env002">est_env002</option>
+                <option value="est_perma01">est_perma01</option>
+                <option value="est_eco02">est_eco02</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6">
+            <h3>Monto de Multas Generadas por Periodo (Column Chart)</h3>
+            <div id="column_chart_div" class="chart-container">Cargando gráfico...</div>
+        </div>
+        
+        <div class="col-md-6">
+            <h3>Distribución por Estado de Pago (Pie Chart)</h3>
+            <div id="pie_chart_div" class="chart-container">Cargando gráfico...</div>
+        </div>
+    </div>
+    
+    <div class="row" style="margin-top: 30px;">
+        <div class="col-md-6">
+            <h3>Top 10 Usuarios con Mayor Monto Acumulado (Bar Chart)</h3>
+            <div id="bar_chart_div" class="chart-container">Cargando gráfico...</div>
+        </div>
+        
+        <div class="col-md-6">
+            <h3>Correlación Días de Atraso vs Monto de Multa (Scatter Chart)</h3>
+            <div id="scatter_chart_div" class="chart-container">Cargando gráfico...</div>
+        </div>
+    </div>
+</div>
+{% endblock %}
